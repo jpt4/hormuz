@@ -355,6 +355,94 @@
             letter-spacing: 2px;
         }
 
+        /* Reference panel — slides from left */
+        .ref-panel {
+            position: absolute;
+            left: -460px;
+            top: 0;
+            width: 460px;
+            height: 100%;
+            background: rgba(1, 10, 21, 0.98);
+            border-right: 2px solid var(--phosphor-cyan);
+            z-index: 500;
+            transition: left 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            padding: 25px;
+            box-sizing: border-box;
+            pointer-events: auto;
+            overflow-y: auto;
+            font-size: 13px;
+        }
+
+        .ref-panel.open { left: 0; }
+
+        .ref-toggle {
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 45px;
+            height: 90px;
+            background: rgba(1, 10, 21, 0.95);
+            border: 2px solid var(--phosphor-cyan);
+            border-left: none;
+            z-index: 400;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            pointer-events: auto;
+            color: var(--phosphor-cyan);
+            flex-direction: column;
+            transition: 0.3s;
+        }
+
+        .ref-toggle.open { left: 460px; }
+        .ref-toggle span {
+            font-size: 10px;
+            margin-top: 5px;
+            writing-mode: vertical-lr;
+            text-orientation: upright;
+            letter-spacing: 2px;
+        }
+
+        .ref-panel h3 {
+            color: var(--phosphor-cyan);
+            border-bottom: 1px solid var(--phosphor-dim);
+            padding-bottom: 5px;
+            letter-spacing: 2px;
+            font-size: 14px;
+            margin-top: 18px;
+        }
+
+        .ref-panel table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            margin-top: 8px;
+        }
+
+        .ref-panel th {
+            text-align: left;
+            color: var(--phosphor-dim);
+            border-bottom: 1px solid var(--phosphor-dim);
+            padding: 3px;
+        }
+
+        .ref-panel td {
+            padding: 3px;
+            border-bottom: 1px solid rgba(0, 255, 255, 0.08);
+        }
+
+        .ref-panel ul {
+            padding-left: 16px;
+            margin: 6px 0;
+        }
+
+        .ref-panel li {
+            margin-bottom: 4px;
+        }
+
         /* Overlay screens — intro, reference, end */
         .overlay-screen {
             position: absolute;
@@ -529,7 +617,7 @@
         <div class="hud-center" id="hud-oil">
             <div>GLOBAL BRENT CRUDE</div>
             <div id="ui-oil-price" class="oil-price">$85.00</div>
-            <div>BARREL / USD</div>
+            <div>USD/bbl</div>
         </div>
 
         <!-- Phase indicator -->
@@ -541,7 +629,7 @@
             <div>SECTOR: HORMUZ_STRAIT</div>
             <div>STATUS: <span class="blink" id="ui-status">MONITORING_TRAFFIC</span></div>
             <div style="margin-top: 15px; color: #00ffaa;">FUNDS: $<span id="ui-funds">800</span>M</div>
-            <div>WAVE: <span id="ui-wave">1</span> / 20</div>
+            <div>WAVE: <span id="ui-wave">1 / 20</span></div>
             <div>DATE: <span id="ui-date">01 MAR 2026</span></div>
             <div style="margin-top: 10px;">F-14 CHARGES: <span id="ui-f14">0</span> / <span id="ui-f14-max">3</span></div>
         </div>
@@ -563,6 +651,87 @@
         <div class="ui-overlay bottom-right">
             <div>TRACKING: ACTIVE</div>
             <div>LINK: SECURE_ENCRYPTED</div>
+        </div>
+
+        <!-- Reference panel toggle -->
+        <div class="ref-toggle" id="btn-ref">&#9654;<span>REF</span></div>
+
+        <!-- Reference panel: slides from left -->
+        <div class="ref-panel" id="ref-panel">
+            <h2 style="border-bottom: 2px solid var(--phosphor-cyan); padding-bottom: 10px; margin-top: 0; font-size: 18px; letter-spacing: 6px;">STRATEGIC READOUT</h2>
+
+            <h3>MISSION OBJECTIVE</h3>
+            <ul>
+                <li><strong>PRIMARY:</strong> Drive crude oil above <strong>$250/barrel</strong></li>
+                <li><strong>FAIL:</strong> Oil drops below <strong>$60/barrel</strong></li>
+                <li><strong>STALEMATE:</strong> 20 waves with no resolution</li>
+                <li>Funds per wave: <strong>OIL_PRICE &times; 12</strong></li>
+            </ul>
+
+            <h3>CONTROLS</h3>
+            <ul>
+                <li><strong>[1-6]</strong> Select unit type</li>
+                <li><strong>[7/F]</strong> F-14 Tomcat strike</li>
+                <li><strong>[U]</strong> Upgrade selected unit</li>
+                <li><strong>[Tab]</strong> Cycle placed units</li>
+                <li><strong>[S]</strong> Toggle unit sidebar</li>
+                <li><strong>[R/?]</strong> Toggle this reference</li>
+                <li><strong>[Space]</strong> Pause / Unpause</li>
+                <li><strong>[Esc]</strong> Cancel selection</li>
+                <li><strong>Scroll</strong> Zoom &bull; <strong>Drag</strong> Pan</li>
+                <li><strong>Click unit</strong> Select for upgrade</li>
+                <li><strong>Right-click</strong> Cancel placement</li>
+            </ul>
+
+            <h3>UNIT SPECIFICATIONS</h3>
+            <table>
+                <thead><tr><th>UNIT</th><th>COST</th><th>HP</th><th>DPS</th><th>RNG</th><th>SIG</th></tr></thead>
+                <tbody>
+                    <tr><td>Silkworm Battery</td><td>$200M</td><td>450</td><td>50</td><td>750</td><td>HEAVY</td></tr>
+                    <tr><td>Misagh-2 SAM</td><td>$120M</td><td>250</td><td>20</td><td>650</td><td>MED</td></tr>
+                    <tr><td>Shahed Drone</td><td>$60M</td><td>80</td><td>120</td><td>900</td><td>LOW</td></tr>
+                    <tr><td>Mine Layer</td><td>$100M</td><td>280</td><td>300*</td><td>550</td><td>MED</td></tr>
+                    <tr><td>Zolfaghar FAB</td><td>$75M</td><td>100</td><td>20</td><td>350</td><td>LOW</td></tr>
+                    <tr><td>Ghadir Sub</td><td>$250M</td><td>200</td><td>65</td><td>500</td><td>STEALTH</td></tr>
+                </tbody>
+            </table>
+            <div style="opacity: 0.5; font-size: 11px; margin-top: 4px;">* Mine damage per detonation (splash). Mines placed by USV.</div>
+
+            <h3>UPGRADE SYSTEM</h3>
+            <div style="opacity: 0.7; font-size: 12px; margin-bottom: 8px;">Select a placed unit + press [U]. Cost = base &times; 1.4 per tier.</div>
+            <table>
+                <thead><tr><th>UNIT</th><th>TIER 1</th><th>TIER 2</th></tr></thead>
+                <tbody>
+                    <tr><td>Battery</td><td>Extended Range (+30% rng) $280M</td><td>Dual Targeting (+25% dps, +20% hp) $392M</td></tr>
+                    <tr><td>SAM</td><td>Anti-Ship (+15% rng, +20% dps) $168M</td><td>Dual Target + Splash (+30% dps, +15% hp) $235M</td></tr>
+                    <tr><td>Drone</td><td>Extended Swarm (7 strikes) $84M</td><td>Heavy Swarm (+10% rng, +25% dps, 10 strikes) $118M</td></tr>
+                    <tr><td>Mine</td><td>Heavy Mines (+60% dmg, faster) $140M</td><td>Dense Field (+15% rng, 6 mines) $196M</td></tr>
+                    <tr><td>FAB</td><td>Fast Attack (+15% rng, +30% dps, +50% spd) $105M</td><td>Torpedo Kit (+50% dps, +20% hp) $147M</td></tr>
+                    <tr><td>Sub</td><td>Adv. Torpedoes (+20% rng, +25% dps) $350M</td><td>Dual Salvo (+40% dps, +15% hp) $490M</td></tr>
+                </tbody>
+            </table>
+
+            <h3>THREAT ASSESSMENT</h3>
+            <ul>
+                <li><strong>TANKERS:</strong> Small/Med/VLCC. Destroy to raise oil. Escape lowers oil.</li>
+                <li><strong>DESTROYERS:</strong> Fire on your units. Destroy for $150M + F-14 charge.</li>
+                <li><strong>F-35s:</strong> Air units from wave 5. Target non-subs. $200M on kill.</li>
+                <li><strong>CRUISE MISSILES:</strong> Target by signature. Only SAMs intercept (30%).</li>
+            </ul>
+
+            <h3>SPECIAL: F-14 TOMCAT</h3>
+            <ul>
+                <li>Charges build from destroyer kills (2 kills = 1 charge)</li>
+                <li>Max 3 charges. 30s cooldown between strikes.</li>
+                <li>Devastating anti-ship sweep across the map.</li>
+            </ul>
+
+            <h3>SHIPPING LANES</h3>
+            <ul>
+                <li><strong>Waves 1-7:</strong> TR-7 only</li>
+                <li><strong>Waves 8-14:</strong> + Northern Qeshm route</li>
+                <li><strong>Waves 15+:</strong> + Southern flanking route</li>
+            </ul>
         </div>
 
         <!-- Sidebar toggle button -->
@@ -684,8 +853,8 @@ const F35_COOLDOWN = 1.5;
 // --- CRUISE MISSILE SYSTEM ---
 const CRUISE_MISSILE_SPEED = 400;
 const CRUISE_MISSILE_DAMAGE = 1000;       // effectively one-shot if not evaded
-const CRUISE_MISSILE_BASE_RATE = 0.005;   // probability per frame-second per wave
-const CRUISE_MISSILE_SETUP_MULT = 0.25;   // reduced intensity during setup phase
+const CRUISE_MISSILE_BASE_RATE = 0.03;    // probability per frame-second per wave (aggressive)
+const CRUISE_MISSILE_SETUP_MULT = 0.35;   // reduced but still threatening during setup
 
 // Cruise missile evasion chances per unit signature
 const EVASION_HEAVY = 0.05;              // Coastal Battery
@@ -834,6 +1003,8 @@ const UNIT_DEFS = [
         signature: 'stealth',
         evasion: 1.0,    // immune to cruise missiles
         targets: ['destroyer', 'tanker'],   // priority: escorts first
+        patrolRadius: 160,
+        patrolSpeed: 50,    // slower than FABs (120)
         upgrades: [
             { name: 'Advanced Torpedoes', costMult: 1.4, rangeBoost: 0.20, dpsBoost: 0.25, hpBoost: 0, special: null },
             { name: 'Dual Salvo', costMult: 1.4, rangeBoost: 0, dpsBoost: 0.40, hpBoost: 0.15, special: 'dual-torpedo' }
@@ -882,7 +1053,9 @@ const GameState = {
     // UI state
     selectedUnitType: -1,  // index into UNIT_DEFS, -1 = none
     selectedPlacedUnit: null,
+    hoveredUnit: null,
     sidebarOpen: false,
+    refOpen: false,
 
     // Spawn queue
     spawnQueue: [],
@@ -904,6 +1077,7 @@ const Entities = {
     enemyProjectiles: [],  // destroyer/F-35 projectiles
     cruiseMissiles: [],    // incoming cruise missiles
     mines: [],             // active mines on the water
+    usvs: [],              // mine-layer unmanned surface vessels in transit
     effects: [],           // visual effects (explosions, etc.)
 };
 
@@ -989,16 +1163,42 @@ container.addEventListener('mousedown', (e) => {
         handlePlacement(e);
         return;
     }
+    // Check if clicking on an existing unit to select it
+    const world = screenToWorld(e.clientX, e.clientY);
+    const clickedUnit = Entities.playerUnits.find(u =>
+        u.hp > 0 && Math.hypot(u.x - world.x, u.y - world.y) < 30
+    );
+    if (clickedUnit) {
+        GameState.selectedPlacedUnit = clickedUnit;
+        updateUI();
+        return;
+    }
+    // Deselect if clicking empty space
+    if (GameState.selectedPlacedUnit) {
+        GameState.selectedPlacedUnit = null;
+        updateUI();
+    }
     isPanning = true;
     panStartX = e.clientX - panX;
     panStartY = e.clientY - panY;
 });
 
 window.addEventListener('mousemove', (e) => {
-    if (!isPanning) return;
-    panX = e.clientX - panStartX;
-    panY = e.clientY - panStartY;
-    updateViewportTransform();
+    if (isPanning) {
+        panX = e.clientX - panStartX;
+        panY = e.clientY - panStartY;
+        updateViewportTransform();
+        return;
+    }
+    // Track hovered player unit for range circle display
+    const world = screenToWorld(e.clientX, e.clientY);
+    GameState.hoveredUnit = null;
+    for (const u of Entities.playerUnits) {
+        if (u.hp > 0 && Math.hypot(u.x - world.x, u.y - world.y) < 30) {
+            GameState.hoveredUnit = u;
+            break;
+        }
+    }
 });
 
 window.addEventListener('mouseup', () => {
@@ -1433,6 +1633,12 @@ function toggleSidebar() {
     document.getElementById('btn-sidebar').classList.toggle('open', GameState.sidebarOpen);
 }
 
+function toggleReference() {
+    GameState.refOpen = !GameState.refOpen;
+    document.getElementById('ref-panel').classList.toggle('open', GameState.refOpen);
+    document.getElementById('btn-ref').classList.toggle('open', GameState.refOpen);
+}
+
 
 /* ====================================================================
    SECTION 11: KEYBOARD INPUT
@@ -1487,7 +1693,7 @@ window.addEventListener('keydown', (e) => {
             break;
         case 'r':
         case '?':
-            // TODO: toggle reference overlay
+            toggleReference();
             break;
     }
 });
@@ -1649,20 +1855,24 @@ function initAudio() {
 document.addEventListener('click', initAudio, { once: true });
 document.addEventListener('keydown', initAudio, { once: true });
 
+// --- Core audio primitives ---
+// playTone: clean oscillator with envelope
 function playTone(freq, duration, type, volume) {
     if (!audioCtx) return;
+    const t = audioCtx.currentTime;
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.type = type || 'sine';
-    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-    gain.gain.setValueAtTime((volume || 1) * MASTER_VOLUME, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+    osc.frequency.setValueAtTime(freq, t);
+    gain.gain.setValueAtTime((volume || 1) * MASTER_VOLUME, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
     osc.connect(gain);
     gain.connect(audioCtx.destination);
-    osc.start();
-    osc.stop(audioCtx.currentTime + duration);
+    osc.start(t);
+    osc.stop(t + duration);
 }
 
+// playNoise: raw white noise burst (used as building block)
 function playNoise(duration, volume) {
     if (!audioCtx) return;
     const bufferSize = audioCtx.sampleRate * duration;
@@ -1679,99 +1889,345 @@ function playNoise(duration, volume) {
     source.start();
 }
 
-const SFX = {
-    missileLaunch() {
-        // Rising sine whoosh 400→1200 Hz
-        if (!audioCtx) return;
+// playFilteredNoise: band-passed noise for muffled thuds and distant detonations
+function playFilteredNoise(duration, volume, lowFreq, highFreq) {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const bufferSize = Math.floor(audioCtx.sampleRate * duration);
+    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+    const source = audioCtx.createBufferSource();
+    source.buffer = buffer;
+    const bandpass = audioCtx.createBiquadFilter();
+    bandpass.type = 'bandpass';
+    bandpass.frequency.setValueAtTime((lowFreq + highFreq) / 2, t);
+    bandpass.Q.setValueAtTime(0.8, t);
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime((volume || 1) * MASTER_VOLUME, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+    source.connect(bandpass);
+    bandpass.connect(gain);
+    gain.connect(audioCtx.destination);
+    source.start(t);
+}
+
+// --- 80s Cold War synth sound effects ---
+// Design: analog synth character (detuned oscillators, FM touches,
+// pitch wobble) layered over austere DEFCON CRT terminal aesthetic.
+
+// Helper: detuned oscillator pair — classic analog synth thickness
+function playDetunedPair(freq, duration, type, volume, detune) {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const v = (volume || 0.2) * MASTER_VOLUME;
+    const d = detune || 4; // cents
+    for (const off of [-d, d]) {
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(400, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.3);
-        gain.gain.setValueAtTime(0.3 * MASTER_VOLUME, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
+        osc.type = type || 'sawtooth';
+        osc.frequency.setValueAtTime(freq, t);
+        osc.detune.setValueAtTime(off, t);
+        gain.gain.setValueAtTime(v * 0.5, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
         osc.connect(gain);
         gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.35);
+        osc.start(t);
+        osc.stop(t + duration);
+    }
+}
+
+const SFX = {
+    missileLaunch() {
+        // Synth radar blip: detuned saw sweep + filtered thud
+        if (!audioCtx) return;
+        const t = audioCtx.currentTime;
+        for (const off of [-3, 3]) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(240, t);
+            osc.frequency.exponentialRampToValueAtTime(110, t + 0.18);
+            osc.detune.setValueAtTime(off, t);
+            gain.gain.setValueAtTime(0.15 * MASTER_VOLUME, t);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(t);
+            osc.stop(t + 0.22);
+        }
+        playFilteredNoise(0.1, 0.15, 60, 200);
     },
 
     mineDetonate() {
-        // Deep sonar ping + reverb
-        playTone(80, 0.6, 'sine', 0.5);
-        setTimeout(() => playTone(60, 0.8, 'sine', 0.2), 100);
+        // Depth charge: FM-synth metallic crack over sub-bass concussion
+        if (!audioCtx) return;
+        const t = audioCtx.currentTime;
+        // Sub-bass body
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(55, t);
+        osc.frequency.exponentialRampToValueAtTime(28, t + 0.5);
+        gain.gain.setValueAtTime(0.5 * MASTER_VOLUME, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t);
+        osc.stop(t + 0.6);
+        // FM metallic transient — carrier modulated by high-freq modulator
+        const mod = audioCtx.createOscillator();
+        const modGain = audioCtx.createGain();
+        const car = audioCtx.createOscillator();
+        const carGain = audioCtx.createGain();
+        mod.frequency.setValueAtTime(280, t);
+        modGain.gain.setValueAtTime(200, t);
+        modGain.gain.exponentialRampToValueAtTime(0.1, t + 0.15);
+        car.frequency.setValueAtTime(90, t);
+        carGain.gain.setValueAtTime(0.3 * MASTER_VOLUME, t);
+        carGain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+        mod.connect(modGain);
+        modGain.connect(car.frequency);
+        car.connect(carGain);
+        carGain.connect(audioCtx.destination);
+        mod.start(t); car.start(t);
+        mod.stop(t + 0.2); car.stop(t + 0.2);
+        playFilteredNoise(0.45, 0.3, 35, 160);
     },
 
     droneAttack() {
-        playTone(150, 0.2, 'square', 0.15);
+        // Buzzy synth stab — square wave with pitch drop
+        if (!audioCtx) return;
+        const t = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const filter = audioCtx.createBiquadFilter();
+        const gain = audioCtx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(200, t);
+        osc.frequency.exponentialRampToValueAtTime(140, t + 0.08);
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(600, t);
+        filter.frequency.exponentialRampToValueAtTime(200, t + 0.1);
+        gain.gain.setValueAtTime(0.12 * MASTER_VOLUME, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t);
+        osc.stop(t + 0.12);
     },
 
     f14Flyby() {
-        // Jet roar — sawtooth sweep
+        // Analog synth jet: detuned sawtooths with filter sweep + noise wash
         if (!audioCtx) return;
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(100, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.5);
-        osc.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 1.5);
-        gain.gain.setValueAtTime(0.4 * MASTER_VOLUME, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.5 * MASTER_VOLUME, audioCtx.currentTime + 0.5);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.8);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 1.8);
+        const t = audioCtx.currentTime;
+        for (const off of [-6, 0, 6]) {
+            const osc = audioCtx.createOscillator();
+            const filter = audioCtx.createBiquadFilter();
+            const gain = audioCtx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(60, t);
+            osc.frequency.linearRampToValueAtTime(150, t + 0.6);
+            osc.frequency.linearRampToValueAtTime(45, t + 2.0);
+            osc.detune.setValueAtTime(off, t);
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(180, t);
+            filter.frequency.linearRampToValueAtTime(500, t + 0.5);
+            filter.frequency.linearRampToValueAtTime(100, t + 2.0);
+            filter.Q.setValueAtTime(3, t);
+            gain.gain.setValueAtTime(0.08 * MASTER_VOLUME, t);
+            gain.gain.linearRampToValueAtTime(0.2 * MASTER_VOLUME, t + 0.5);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 2.2);
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(t);
+            osc.stop(t + 2.2);
+        }
+        playFilteredNoise(2.0, 0.15, 60, 250);
     },
 
     torpedoLaunch() {
-        playTone(60, 0.3, 'sine', 0.3);
-        playNoise(0.2, 0.15);
+        // Classic sonar ping with analog vibrato
+        if (!audioCtx) return;
+        const t = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const lfo = audioCtx.createOscillator();
+        const lfoGain = audioCtx.createGain();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(480, t);
+        osc.frequency.exponentialRampToValueAtTime(400, t + 0.4);
+        // Subtle vibrato — analog oscillator drift
+        lfo.frequency.setValueAtTime(5, t);
+        lfoGain.gain.setValueAtTime(3, t);
+        lfo.connect(lfoGain);
+        lfoGain.connect(osc.frequency);
+        gain.gain.setValueAtTime(0.2 * MASTER_VOLUME, t);
+        gain.gain.setValueAtTime(0.12 * MASTER_VOLUME, t + 0.06);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t); lfo.start(t);
+        osc.stop(t + 0.5); lfo.stop(t + 0.5);
     },
 
     shipExplosion() {
-        playNoise(0.5, 0.4);
-        playTone(50, 0.4, 'sine', 0.3);
+        // Hull breach: FM metallic crash over filtered bass thud
+        if (!audioCtx) return;
+        const t = audioCtx.currentTime;
+        // Bass body
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(42, t);
+        osc.frequency.exponentialRampToValueAtTime(22, t + 0.7);
+        gain.gain.setValueAtTime(0.4 * MASTER_VOLUME, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t);
+        osc.stop(t + 0.8);
+        // FM metallic crash
+        const mod = audioCtx.createOscillator();
+        const modGain = audioCtx.createGain();
+        const car = audioCtx.createOscillator();
+        const carFilter = audioCtx.createBiquadFilter();
+        const carGain = audioCtx.createGain();
+        mod.frequency.setValueAtTime(340, t);
+        modGain.gain.setValueAtTime(300, t);
+        modGain.gain.exponentialRampToValueAtTime(1, t + 0.3);
+        car.frequency.setValueAtTime(70, t);
+        carFilter.type = 'lowpass';
+        carFilter.frequency.setValueAtTime(400, t);
+        carFilter.frequency.exponentialRampToValueAtTime(80, t + 0.4);
+        carGain.gain.setValueAtTime(0.2 * MASTER_VOLUME, t);
+        carGain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+        mod.connect(modGain);
+        modGain.connect(car.frequency);
+        car.connect(carFilter);
+        carFilter.connect(carGain);
+        carGain.connect(audioCtx.destination);
+        mod.start(t); car.start(t);
+        mod.stop(t + 0.35); car.stop(t + 0.35);
+        playFilteredNoise(0.6, 0.25, 30, 180);
     },
 
     oilUp() {
-        playTone(600, 0.1, 'sine', 0.2);
-        setTimeout(() => playTone(800, 0.1, 'sine', 0.2), 80);
+        // Synth data blip: ascending minor third, analog character
+        playDetunedPair(260, 0.08, 'triangle', 0.1, 5);
+        setTimeout(() => playDetunedPair(310, 0.08, 'triangle', 0.1, 5), 80);
     },
 
     oilDown() {
-        playTone(400, 0.15, 'sine', 0.2);
-        setTimeout(() => playTone(250, 0.2, 'sine', 0.2), 80);
+        // Synth warning blip: descending
+        playDetunedPair(280, 0.1, 'triangle', 0.12, 5);
+        setTimeout(() => playDetunedPair(200, 0.14, 'triangle', 0.12, 5), 90);
     },
 
     cruiseMissileWarning() {
-        playTone(800, 0.1, 'square', 0.2);
-        setTimeout(() => playTone(600, 0.1, 'square', 0.2), 120);
+        // Cold War klaxon: filtered square with pitch wobble
+        if (!audioCtx) return;
+        const t = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const lfo = audioCtx.createOscillator();
+        const lfoGain = audioCtx.createGain();
+        const filter = audioCtx.createBiquadFilter();
+        const gain = audioCtx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(220, t);
+        osc.frequency.setValueAtTime(160, t + 0.15);
+        osc.frequency.setValueAtTime(220, t + 0.30);
+        // Analog wobble
+        lfo.frequency.setValueAtTime(8, t);
+        lfoGain.gain.setValueAtTime(6, t);
+        lfo.connect(lfoGain);
+        lfoGain.connect(osc.frequency);
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(500, t);
+        filter.Q.setValueAtTime(1.5, t);
+        gain.gain.setValueAtTime(0.14 * MASTER_VOLUME, t);
+        gain.gain.setValueAtTime(0.10 * MASTER_VOLUME, t + 0.15);
+        gain.gain.setValueAtTime(0.14 * MASTER_VOLUME, t + 0.30);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t); lfo.start(t);
+        osc.stop(t + 0.45); lfo.stop(t + 0.45);
     },
 
     unitPlaced() {
-        playTone(1000, 0.08, 'sine', 0.2);
+        // Sharp synth confirmation: filtered saw blip
+        if (!audioCtx) return;
+        const t = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const filter = audioCtx.createBiquadFilter();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(360, t);
+        osc.frequency.exponentialRampToValueAtTime(280, t + 0.06);
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(800, t);
+        filter.frequency.exponentialRampToValueAtTime(200, t + 0.08);
+        gain.gain.setValueAtTime(0.15 * MASTER_VOLUME, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t);
+        osc.stop(t + 0.1);
     },
 
     waveStart() {
-        playTone(400, 0.15, 'square', 0.2);
-        setTimeout(() => playTone(600, 0.15, 'square', 0.2), 150);
-        setTimeout(() => playTone(800, 0.2, 'square', 0.2), 300);
+        // Synth arpeggio: descending minor triad — 80s tension
+        if (!audioCtx) return;
+        [220, 185, 147].forEach((f, i) => {
+            setTimeout(() => playDetunedPair(f, 0.25, 'sawtooth', 0.15, 4), i * 180);
+        });
+        // Low drone swell underneath
+        setTimeout(() => {
+            const t = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(55, t);
+            gain.gain.setValueAtTime(0.001, t);
+            gain.gain.linearRampToValueAtTime(0.15 * MASTER_VOLUME, t + 0.3);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(t);
+            osc.stop(t + 0.8);
+        }, 400);
     },
 
     victory() {
-        [400, 500, 600, 800].forEach((f, i) =>
-            setTimeout(() => playTone(f, 0.3, 'sine', 0.3), i * 200));
+        // Rising synth power chord — restrained triumph, analog character
+        if (!audioCtx) return;
+        const chords = [[165, 196, 262], [196, 247, 330]]; // Am → C
+        chords.forEach((notes, i) => {
+            setTimeout(() => {
+                notes.forEach(f => playDetunedPair(f, 0.5, 'sawtooth', 0.1, 5));
+            }, i * 500);
+        });
     },
 
     defeat() {
-        [400, 300, 200, 100].forEach((f, i) =>
-            setTimeout(() => playTone(f, 0.4, 'sawtooth', 0.2), i * 250));
+        // Descending minor synth — Cold War dread
+        if (!audioCtx) return;
+        const chords = [[196, 233, 294], [147, 175, 220]]; // Gm → Dm
+        chords.forEach((notes, i) => {
+            setTimeout(() => {
+                notes.forEach(f => playDetunedPair(f, 0.6, 'sawtooth', 0.1, 6));
+            }, i * 600);
+        });
     },
 
     stalemate() {
-        [300, 300, 200, 200].forEach((f, i) =>
-            setTimeout(() => playTone(f, 0.3, 'triangle', 0.2), i * 300));
+        // Unresolved: same two notes repeating, analog pulse
+        [165, 165, 147, 147].forEach((f, i) =>
+            setTimeout(() => playDetunedPair(f, 0.3, 'triangle', 0.12, 3), i * 350));
     },
 };
 
@@ -1810,6 +2266,7 @@ function update(dt) {
             updateFABPatrol(dt);
             updateMineLayers(dt);
             updateMines(dt);
+            updateUSVs(dt);
             updateF14Strike(dt);
             removeDeadEntities();
             if (GameState.setupTimer <= 0) {
@@ -1829,6 +2286,7 @@ function update(dt) {
             updateFABPatrol(dt);
             updateMineLayers(dt);
             updateMines(dt);
+            updateUSVs(dt);
             updateF14Strike(dt);
             removeDeadEntities();
             // Check if wave is complete (all enemies spawned and cleared)
@@ -2169,6 +2627,9 @@ function updatePlayerUnits(dt) {
 
         // Skip depleted drone swarms
         if (unit.attritable && unit.strikesRemaining <= 0) continue;
+
+        // Mine layers do NOT fire directly — they only deal damage via mines
+        if (unit.defId === 3) continue;
 
         // Find best target in range
         const target = findTarget(unit);
@@ -2515,7 +2976,7 @@ function pickCruiseMissileTarget() {
 function updateFABPatrol(dt) {
     for (const unit of Entities.playerUnits) {
         if (unit.hp <= 0) continue;
-        if (unit.defId !== 4) continue; // Only FABs patrol
+        if (unit.defId !== 4 && unit.defId !== 5) continue; // FABs and Subs patrol
 
         // Advance patrol angle
         unit.patrolAngle += (unit.patrolSpeed / unit.patrolRadius) * dt;
@@ -2574,7 +3035,6 @@ function placeMine(mineLayer) {
         for (const pathId of GameState.activePaths) {
             const path = lanePaths[pathId];
             if (!path) continue;
-            // Sample several points along the path to check proximity
             const totalLen = path.getTotalLength();
             for (let t = 0; t < totalLen; t += 100) {
                 const pt = path.getPointAtLength(t);
@@ -2587,16 +3047,103 @@ function placeMine(mineLayer) {
         }
         if (!nearLane) continue;
 
-        Entities.mines.push({
-            x: mx,
-            y: my,
+        // Launch a USV to deliver the mine (instead of placing directly)
+        Entities.usvs.push({
+            x: mineLayer.x,
+            y: mineLayer.y,
+            targetX: mx,
+            targetY: my,
             ownerUnit: mineLayer,
             damage: mineLayer.dps,
             splashRadius: UNIT_DEFS[3].mineSplashRadius,
-            active: true,
-            respawnTimer: 0,
+            speed: 180,
+            phase: 'outbound',  // outbound → laying → returning
+            alive: true,
         });
         return;
+    }
+}
+
+function updateUSVs(dt) {
+    for (let i = Entities.usvs.length - 1; i >= 0; i--) {
+        const usv = Entities.usvs[i];
+        if (!usv.alive) {
+            Entities.usvs.splice(i, 1);
+            continue;
+        }
+
+        if (usv.phase === 'outbound') {
+            // Move toward mine target
+            const dx = usv.targetX - usv.x;
+            const dy = usv.targetY - usv.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist < 10) {
+                // Arrived — lay the mine
+                Entities.mines.push({
+                    x: usv.targetX,
+                    y: usv.targetY,
+                    ownerUnit: usv.ownerUnit,
+                    damage: usv.damage,
+                    splashRadius: usv.splashRadius,
+                    active: true,
+                    respawnTimer: 0,
+                });
+                usv.phase = 'returning';
+            } else {
+                usv.x += (dx / dist) * usv.speed * dt;
+                usv.y += (dy / dist) * usv.speed * dt;
+            }
+        } else if (usv.phase === 'returning') {
+            // Return to launch site
+            const homeX = usv.ownerUnit.x;
+            const homeY = usv.ownerUnit.y;
+            const dx = homeX - usv.x;
+            const dy = homeY - usv.y;
+            const dist = Math.hypot(dx, dy);
+
+            if (dist < 15 || usv.ownerUnit.hp <= 0) {
+                // Arrived home (or home destroyed) — USV disappears
+                usv.alive = false;
+            } else {
+                usv.x += (dx / dist) * usv.speed * dt;
+                usv.y += (dy / dist) * usv.speed * dt;
+            }
+        }
+    }
+}
+
+function drawUSVs() {
+    for (const usv of Entities.usvs) {
+        if (!usv.alive) continue;
+        ctx.save();
+        ctx.shadowColor = '#888888';
+        ctx.shadowBlur = 5;
+        ctx.strokeStyle = '#aaaaaa';
+        ctx.fillStyle = 'rgba(150, 150, 150, 0.3)';
+        ctx.lineWidth = 1.5;
+
+        // Small boat icon — simple diamond/arrow
+        const angle = usv.phase === 'outbound'
+            ? Math.atan2(usv.targetY - usv.y, usv.targetX - usv.x)
+            : Math.atan2(usv.ownerUnit.y - usv.y, usv.ownerUnit.x - usv.x);
+        const cos = Math.cos(angle), sin = Math.sin(angle);
+        const len = 8, w = 5;
+
+        ctx.beginPath();
+        ctx.moveTo(usv.x + len * cos, usv.y + len * sin);
+        ctx.lineTo(usv.x - len * cos - w * sin, usv.y - len * sin + w * cos);
+        ctx.lineTo(usv.x - len * cos * 0.4, usv.y - len * sin * 0.4);
+        ctx.lineTo(usv.x - len * cos + w * sin, usv.y - len * sin - w * cos);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Label
+        ctx.fillStyle = '#888888';
+        ctx.font = '7px "Courier New", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('USV', usv.x, usv.y + 14);
+        ctx.restore();
     }
 }
 
@@ -2665,7 +3212,7 @@ function removeDeadEntities() {
 function checkWinLose() {
     if (GameState.oil < OIL_LOSE_THRESHOLD) {
         showDefeat();
-    } else if (GameState.oil > OIL_WIN_THRESHOLD) {
+    } else if (GameState.oil > OIL_WIN_THRESHOLD && !GameState.passedStalemate) {
         showVictory();
     }
 }
@@ -2679,9 +3226,23 @@ function showVictory() {
     document.getElementById('end-message').innerText =
         `Oil price reached $${GameState.oil.toFixed(2)}/barrel. Iran controls the Strait.\nWave ${GameState.wave} — ${getWaveDate(GameState.wave)}`;
     document.getElementById('end-buttons').innerHTML =
-        '<button class="btn" onclick="window.location.reload()">RESTART</button>';
+        `<button class="btn" onclick="window.location.reload()">RESTART</button>
+         <button class="btn" onclick="enterUnlimitedMode()">ENTER UNLIMITED MODE</button>`;
     saveHighScore();
 }
+
+function enterUnlimitedMode() {
+    GameState.passedStalemate = true;
+    GameState.phase = 'setup';
+    GameState.setupTimer = SETUP_PHASE_DURATION;
+    document.getElementById('screen-end').classList.add('hidden');
+    const income = Math.round(GameState.oil * WAVE_INCOME_MULTIPLIER / 5) * 5;
+    GameState.funds += income;
+    GameState.wave++;
+    updateActivePaths();
+    updateUI();
+}
+window.enterUnlimitedMode = enterUnlimitedMode;
 
 function showDefeat() {
     GameState.phase = 'defeat';
@@ -2770,6 +3331,9 @@ function draw() {
 
     // --- Mines ---
     drawMines();
+
+    // --- USVs ---
+    drawUSVs();
 
     // --- Enemies ---
     Entities.enemies.forEach(e => {
@@ -2925,15 +3489,35 @@ function drawPlayerUnit(u) {
     ctx.save();
     const def = UNIT_DEFS[u.defId];
 
-    // Range circle on hover/selection (shown for all units, faintly)
-    if (u === GameState.selectedPlacedUnit) {
-        ctx.strokeStyle = 'rgba(0, 255, 255, 0.15)';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([8, 8]);
-        ctx.beginPath();
-        ctx.arc(u.x, u.y, u.range, 0, Math.PI * 2);
-        ctx.stroke();
+    // Range circles always visible for all units
+    const isSelected = u === GameState.selectedPlacedUnit;
+    ctx.strokeStyle = isSelected ? 'rgba(0, 255, 255, 0.35)' : 'rgba(0, 255, 255, 0.08)';
+    ctx.lineWidth = isSelected ? 2 : 0.5;
+    ctx.setLineDash(isSelected ? [4, 4] : [6, 12]);
+    ctx.beginPath();
+    ctx.arc(u.x, u.y, u.range, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Selected unit: pulsing highlight box
+    if (isSelected) {
+        const pulse = 0.5 + 0.5 * Math.sin(GameState.totalTime * 4);
+        ctx.strokeStyle = `rgba(0, 255, 255, ${0.4 + 0.3 * pulse})`;
+        ctx.lineWidth = 2;
         ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(u.x, u.y, 32, 0, Math.PI * 2);
+        ctx.stroke();
+        // Selection corners
+        const s = 18;
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = `rgba(0, 255, 255, ${0.6 + 0.4 * pulse})`;
+        ctx.beginPath();
+        ctx.moveTo(u.x - s, u.y - s + 6); ctx.lineTo(u.x - s, u.y - s); ctx.lineTo(u.x - s + 6, u.y - s);
+        ctx.moveTo(u.x + s - 6, u.y - s); ctx.lineTo(u.x + s, u.y - s); ctx.lineTo(u.x + s, u.y - s + 6);
+        ctx.moveTo(u.x + s, u.y + s - 6); ctx.lineTo(u.x + s, u.y + s); ctx.lineTo(u.x + s - 6, u.y + s);
+        ctx.moveTo(u.x - s + 6, u.y + s); ctx.lineTo(u.x - s, u.y + s); ctx.lineTo(u.x - s, u.y + s - 6);
+        ctx.stroke();
     }
 
     ctx.shadowColor = '#00ffff';
@@ -3213,6 +3797,7 @@ function drawCruiseMissiles() {
 
 function drawMines() {
     Entities.mines.forEach(m => {
+        if (!m.active) return; // Don't draw detonated mines
         ctx.save();
         // Pulsing red dot
         const pulse = 0.5 + 0.5 * Math.sin(GameState.totalTime * 3 + m.x);
@@ -3302,6 +3887,9 @@ function init() {
 
     // Wire up sidebar toggle
     document.getElementById('btn-sidebar').addEventListener('click', toggleSidebar);
+
+    // Wire up reference panel toggle
+    document.getElementById('btn-ref').addEventListener('click', toggleReference);
 
     // Initial UI
     updateUI();
