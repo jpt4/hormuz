@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>W.O.P.R. - REGIONAL TACTICAL DISPLAY v4.9</title>
+    <style>
+        /* STYLING SYSTEM:
+           - Uses CSS Variables for 'Phosphor' terminal aesthetic.
+           - Employs 'drop-shadow' filters to simulate CRT phosphor glow.
+           - Grid and Scanline backgrounds are used to enhance the 1980s computer aesthetic.
+        */
+        :root {
+            --phosphor-cyan: #00ffff;
+            --phosphor-dim: rgba(0, 255, 255, 0.25);
+            --bg-color: #010a15;
+            --glow: drop-shadow(0 0 5px var(--phosphor-cyan));
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            color: var(--phosphor-cyan);
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* Main CRT Display Frame */
+        .crt-container {
+            position: relative;
+            width: 1500px; 
+            height: 1050px;
+            background-color: var(--bg-color);
+            border: 2px solid var(--phosphor-cyan);
+            box-shadow: 0 0 20px var(--phosphor-cyan), inset 0 0 40px rgba(0, 255, 255, 0.2);
+            overflow: hidden;
+            cursor: grab;
+        }
+
+        .crt-container:active {
+            cursor: grabbing;
+        }
+
+        /* Viewport acts as a movable canvas for panning logic */
+        .viewport {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            will-change: transform;
+        }
+
+        /* Background Grid: Scaled larger than viewport to allow for extensive panning */
+        .grid {
+            position: absolute;
+            top: -2000px;
+            left: -2000px;
+            width: 6000px;
+            height: 6000px;
+            background-image: 
+                linear-gradient(var(--phosphor-dim) 1px, transparent 1px),
+                linear-gradient(90deg, var(--phosphor-dim) 1px, transparent 1px);
+            background-size: 80px 80px;
+            z-index: 1;
+        }
+
+        .map-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+        }
+
+        svg {
+            width: 100%;
+            height: 100%;
+            filter: var(--glow);
+        }
+
+        /* Landmass Styles: Uses a crosshatch pattern for fill and solid stroke for coastline */
+        .landmass {
+            fill: url(#crosshatch);
+            stroke: var(--phosphor-cyan);
+            stroke-width: 4;
+            stroke-linejoin: round;
+        }
+        
+        /* Island Styles: Increased stroke on hover to facilitate selection/interaction */
+        .island {
+            fill: url(#crosshatch);
+            stroke: var(--phosphor-cyan);
+            stroke-width: 3;
+            transition: stroke-width 0.2s;
+            cursor: pointer;
+        }
+
+        .island:hover {
+            stroke-width: 6;
+        }
+
+        /* Border Styles: Dashed lines represent political boundaries */
+        .border {
+            fill: none;
+            stroke: var(--phosphor-cyan);
+            stroke-width: 2.5;
+            stroke-dasharray: 15, 15;
+        }
+
+        /* Shipping Lanes: Distinguished by Green/Emerald color and specific dash patterns */
+        .shipping-lane {
+            fill: none;
+            stroke: #00ffaa;
+            stroke-width: 4;
+            stroke-dasharray: 25, 20;
+            opacity: 0.8;
+        }
+
+        .city-marker {
+            fill: var(--bg-color);
+            stroke: var(--phosphor-cyan);
+            stroke-width: 4;
+        }
+
+        /* Typography settings for country and water labels */
+        .label {
+            fill: var(--phosphor-cyan);
+            font-size: 24px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            user-select: none;
+        }
+
+        .label-country {
+            fill: var(--phosphor-cyan);
+            font-size: 32px;
+            font-weight: 900;
+            letter-spacing: 4px;
+            user-select: none;
+        }
+
+        .label-water {
+            font-size: 28px;
+            fill: var(--phosphor-cyan);
+            font-style: italic;
+            opacity: 0.6;
+            letter-spacing: 7px;
+        }
+
+        .label-small {
+            font-size: 16px;
+            fill: var(--phosphor-cyan);
+            background: var(--bg-color);
+            pointer-events: none;
+        }
+
+        /* Overlay UI: Fixed position data readouts */
+        .ui-overlay {
+            position: absolute;
+            z-index: 10;
+            padding: 25px;
+            pointer-events: none;
+            text-shadow: 0 0 6px var(--phosphor-cyan);
+            font-size: 20px;
+        }
+
+        .top-left { top: 0; left: 0; }
+        .top-right { top: 0; right: 0; text-align: right; }
+        .bottom-left { bottom: 0; left: 0; }
+        .bottom-right { bottom: 0; right: 0; text-align: right; }
+
+        .blink { animation: blinker 1.2s steps(2, start) infinite; }
+        @keyframes blinker { to { visibility: hidden; } }
+
+        .scanlines {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(0, 0, 0, 0.1),
+                rgba(0, 0, 0, 0.1) 1px,
+                transparent 1px,
+                transparent 2px
+            );
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        /* Radar sweep effect for the terminal background */
+        .radar-sweep {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 3000px;
+            height: 6px;
+            background: linear-gradient(90deg, transparent, var(--phosphor-cyan));
+            transform-origin: left center;
+            z-index: 5;
+            opacity: 0.2;
+            animation: sweep 10s infinite linear;
+            pointer-events: none;
+        }
+
+        @keyframes sweep {
+            from { transform: translateY(-50%) rotate(0deg); }
+            to { transform: translateY(-50%) rotate(360deg); }
+        }
+
+        .controls-hint {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 255, 255, 0.1);
+            border: 1px solid var(--phosphor-cyan);
+            padding: 5px 15px;
+            font-size: 12px;
+            z-index: 10;
+            pointer-events: none;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="crt-container" id="container">
+        <div class="viewport" id="viewport">
+            <div class="grid"></div>
+            <div class="radar-sweep"></div>
+
+            <div class="map-layer">
+                <!-- 
+                   SVG TACTICAL LAYER:
+                   Coordinate system (viewBox): 2400 x 1680.
+                   X-axis: West to East
+                   Y-axis: North to South
+                -->
+                <svg viewBox="0 0 2400 1680">
+                    <defs>
+                        <!-- Pattern used for 'land' fill to represent radar density -->
+                        <pattern id="crosshatch" width="18" height="18" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+                            <line x1="0" y1="0" x2="0" y2="18" stroke="var(--phosphor-cyan)" stroke-width="2" opacity="0.25" />
+                        </pattern>
+                    </defs>
+
+                    <!-- 
+                       IRANIAN COASTLINE:
+                       Coordinates define the northern shoreline of the Persian Gulf and Gulf of Oman.
+                       Point (1248, 372) represents the Bandar-e 'Abbas region.
+                    -->
+                    <path class="landmass" d="M -24,-24 L 2424,-24 L 2424,1320 L 2040,1008 L 1752,456 L 1248,372 L 768,624 L -24,312 Z" />
+                    
+                    <!-- 
+                       ARABIAN PENINSULA COASTLINE:
+                       Defines UAE and Oman shorelines.
+                       Point (1404, 720) represents the Musandam Peninsula tip.
+                    -->
+                    <path class="landmass" d="M -24,1704 L 2424,1704 L 2424,1680 L 1920,1632 L 1440,1320 L 1404,720 L 1236,864 L 1008,1080 L 720,1224 L 360,1320 L -24,1344 Z" />
+                    
+                    <text class="label-country" x="600" y="150">IRAN</text>
+
+                    <!-- 
+                       QESHM ISLAND:
+                       Largest island in the strait. Polygon points define its elongated shape.
+                       Eastern tip terminates at X=1260 for alignment checks.
+                    -->
+                    <polygon class="island" points="950,570 1230,440 1260,500 980,640" />
+                    <text class="label-small" x="1032" y="668">QESHM</text>
+
+                    <!-- 
+                       SMALLER ISLANDS:
+                       Positions are optimized for tactical clarity rather than 1:1 scale.
+                    -->
+                    
+                    <!-- Larak: Positioned east of Qeshm's longitude (X > 1260) to avoid overlap -->
+                    <circle class="island" cx="1340" cy="560" r="25" />
+                    <text class="label-small" x="1370" y="570">LARAK</text>
+
+                    <!-- Hormuz: Positioned further east/north in the strait approach -->
+                    <circle class="island" cx="1420" cy="450" r="28" />
+                    <text class="label-small" x="1455" y="455">HORMUZ</text>
+
+                    <!-- Islands toward the central Persian Gulf -->
+                    <circle class="island" cx="850" cy="740" r="22" />
+                    <text class="label-small" x="885" y="745">GR. TUNB</text>
+
+                    <circle class="island" cx="790" cy="770" r="16" />
+
+                    <circle class="island" cx="750" cy="880" r="25" />
+                    <text class="label-small" x="650" y="885">ABU MUSA</text>
+
+                    <circle class="island" cx="580" cy="940" r="22" />
+                    <text class="label-small" x="510" y="945">SIRRI</text>
+
+                    <ellipse class="island" cx="240" cy="920" rx="50" ry="25" />
+                    <text class="label-small" x="220" y="965">KISH</text>
+                    
+                    <!-- 
+                       POLITICAL BOUNDARIES:
+                       Dashed paths separating UAE and Oman sectors.
+                    -->
+                    <path class="border" d="M 1008,1080 L 1152,1320 L 1440,1320" />
+                    <path class="border" d="M 1152,1320 L 1056,1704" />
+
+                    <!-- 
+                       SHIPPING CORRIDOR:
+                       Primary lane (TR-7) for commercial tankers transit.
+                    -->
+                    <path class="shipping-lane" d="M 120,1080 L 600,912 L 960,720 L 1272,600 L 1632,840 L 2280,1392" />
+                    <polygon fill="#00ffaa" points="2280,1392 2244,1380 2256,1392 2244,1404" />
+                    <text class="label-small" x="2016" y="1356" style="fill: #00ffaa;">TR-7 (COMMERCIAL)</text>
+
+                    <!-- 
+                       STRATEGIC CITIES:
+                       Bandar-e 'Abbas marker adjusted north (Y=330) to ensure land-base positioning.
+                    -->
+                    <rect class="city-marker" x="1248" y="330" width="15" height="15" />
+                    <text class="label" x="1284" y="350">BANDAR-E 'ABBAS</text>
+                    
+                    <text class="label-country" x="1260" y="1180">OMAN</text>
+
+                    <circle class="city-marker" cx="792" cy="1296" r="9" />
+                    <text class="label" x="636" y="1284">DUBAYY</text>
+
+                    <circle class="city-marker" cx="504" cy="1440" r="9" />
+                    <text class="label" x="480" y="1488">ABU DHABI</text>
+
+                    <text class="label" x="480" y="1608">UNITED ARAB EMIRATES</text>
+
+                    <rect class="city-marker" x="1890" y="1620" width="15" height="15" />
+                    <text class="label" x="1750" y="1635">MUSCAT</text>
+
+                    <!-- WATER LABELS: Italicized and low-opacity for background identification -->
+                    <text class="label-water" x="1272" y="600">STRAIT OF HORMUZ</text>
+                    <text class="label-water" x="1800" y="1080">GULF OF OMAN</text>
+                    <text class="label-water" x="288" y="768">PERSIAN GULF</text>
+                </svg>
+            </div>
+        </div>
+
+        <!-- Static overlays for DEFCON and Link Status -->
+        <div class="ui-overlay top-left">
+            <div>SYS_OP: GLOBALCOM</div>
+            <div>SECTOR: HORMUZ_STRAIT</div>
+            <div>STATUS: <span class="blink">MONITORING_TRAFFIC</span></div>
+        </div>
+        
+        <div class="ui-overlay top-right">
+            <div>DEFCON LEVEL: 3</div>
+            <div id="clock">00:00:00Z</div>
+        </div>
+
+        <div class="ui-overlay bottom-left">
+            <div>LAT: 26.5683 N</div>
+            <div>LON: 56.2625 E</div>
+            <div>NAV: MOUSE_DRAG / ARROWS</div>
+        </div>
+
+        <div class="ui-overlay bottom-right">
+            <div>TRACKING: ACTIVE</div>
+            <div>LINK: SECURE_ENCRYPTED</div>
+        </div>
+
+        <div class="controls-hint">DRAG TO PAN • ARROW KEYS TO NAVIGATE</div>
+        <div class="scanlines"></div>
+    </div>
+
+    <script>
+        /* CLIENT-SIDE LOGIC:
+           1. UTC Clock Management
+           2. Panning Interaction (Mouse & Keyboard)
+        */
+
+        // Synchronize display clock with UTC time
+        function updateClock() {
+            const now = new Date();
+            const hours = String(now.getUTCHours()).padStart(2, '0');
+            const minutes = String(now.getUTCMinutes()).padStart(2, '0');
+            const seconds = String(now.getUTCSeconds()).padStart(2, '0');
+            document.getElementById('clock').innerText = `${hours}:${minutes}:${seconds}Z`;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        const viewport = document.getElementById('viewport');
+        const container = document.getElementById('container');
+
+        let offsetX = 0;
+        let offsetY = 0;
+        let isDragging = false;
+        let startX, startY;
+
+        // Apply visual transformation based on current pan offset
+        function updateTransform() {
+            viewport.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
+        }
+
+        // Mouse Pan Interaction: Drag to move the entire map layer
+        container.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            startX = e.clientX - offsetX;
+            startY = e.clientY - offsetY;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            offsetX = e.clientX - startX;
+            offsetY = e.clientY - startY;
+            updateTransform();
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        // Keyboard Pan Interaction: Arrow keys for precise navigation
+        window.addEventListener('keydown', (e) => {
+            const step = 40;
+            switch(e.key) {
+                case 'ArrowUp': offsetY += step; break;
+                case 'ArrowDown': offsetY -= step; break;
+                case 'ArrowLeft': offsetX += step; break;
+                case 'ArrowRight': offsetX -= step; break;
+                default: return;
+            }
+            updateTransform();
+        });
+
+    </script>
+</body>
+</html>

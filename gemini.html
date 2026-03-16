@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>W.O.P.R. - STRAIT OF HORMUZ DEFENSE v1.6.5</title>
+    <style>
+        :root {
+            --phosphor-cyan: #00ffff;
+            --phosphor-dim: rgba(0, 255, 255, 0.25);
+            --phosphor-red: #ff3333;
+            --phosphor-green: #33ff33;
+            --phosphor-orange: #ffaa00;
+            --bg-color: #010a15;
+            --glow: drop-shadow(0 0 5px var(--phosphor-cyan));
+        }
+
+        body {
+            margin: 0; padding: 0; background-color: #000; color: var(--phosphor-cyan);
+            font-family: 'Courier New', Courier, monospace; display: flex;
+            justify-content: center; align-items: center; height: 100vh;
+            overflow: hidden; user-select: none;
+        }
+
+        .crt-container {
+            position: relative; width: 100vw; height: 100vh; background-color: var(--bg-color);
+            border: 2px solid var(--phosphor-cyan);
+            box-shadow: 0 0 20px var(--phosphor-cyan), inset 0 0 40px rgba(0, 255, 255, 0.2);
+            overflow: hidden; cursor: grab;
+        }
+        .crt-container:active { cursor: grabbing; }
+
+        .viewport {
+            position: absolute; top: 0; left: 0; width: 2400px; height: 1680px;
+            will-change: transform; transform-origin: 0 0;
+        }
+
+        .grid {
+            position: absolute; top: -2000px; left: -2000px; width: 7000px; height: 7000px;
+            background-image: linear-gradient(var(--phosphor-dim) 1px, transparent 1px),
+                              linear-gradient(90deg, var(--phosphor-dim) 1px, transparent 1px);
+            background-size: 100px 100px; z-index: 1; pointer-events: none;
+        }
+
+        .map-layer { position: absolute; top: 0; left: 0; width: 2400px; height: 1680px; z-index: 2; pointer-events: none; }
+        #game-layer { position: absolute; top: 0; left: 0; width: 2400px; height: 1680px; z-index: 3; pointer-events: auto; }
+
+        svg { width: 100%; height: 100%; filter: var(--glow); pointer-events: none; display: block; }
+        
+        /* Tactical Styles from v4.9 */
+        .landmass { fill: url(#crosshatch); stroke: var(--phosphor-cyan); stroke-width: 4; stroke-linejoin: round; }
+        .island { fill: url(#crosshatch); stroke: var(--phosphor-cyan); stroke-width: 3; }
+        .border { fill: none; stroke: var(--phosphor-cyan); stroke-width: 2.5; stroke-dasharray: 15, 15; }
+        .shipping-lane { fill: none; stroke: #00ffaa; stroke-width: 6; stroke-dasharray: 25, 20; opacity: 0.6; }
+        .city-marker { fill: var(--bg-color); stroke: var(--phosphor-cyan); stroke-width: 4; }
+        
+        .label { fill: var(--phosphor-cyan); font-size: 24px; font-weight: bold; letter-spacing: 2px; }
+        .label-country { fill: var(--phosphor-cyan); font-size: 42px; font-weight: 900; letter-spacing: 6px; opacity: 0.8; }
+        .label-water { font-size: 28px; fill: var(--phosphor-cyan); font-style: italic; opacity: 0.4; letter-spacing: 7px; }
+        .label-small { font-size: 16px; fill: var(--phosphor-cyan); }
+
+        .ui-overlay { position: absolute; z-index: 10; padding: 25px; pointer-events: none; text-shadow: 0 0 6px var(--phosphor-cyan); font-size: 24px; }
+        .top-left { top: 0; left: 0; }
+        .top-right { top: 0; right: 0; text-align: right; }
+        
+        .hud-center {
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 10; text-align: center;
+            background: rgba(1, 10, 21, 0.8); border: 2px solid var(--phosphor-cyan); padding: 15px 40px;
+        }
+        .oil-price { font-size: 52px; font-weight: bold; }
+
+        .sidebar {
+            position: absolute; right: -420px; top: 0; width: 420px; height: 100%;
+            background: rgba(1, 10, 21, 0.98); border-left: 2px solid var(--phosphor-cyan);
+            z-index: 500; transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1); padding: 25px; box-sizing: border-box;
+            display: flex; flex-direction: column; pointer-events: auto; overflow-y: auto;
+        }
+        .sidebar.open { right: 0; }
+        
+        .unit-card {
+            border: 1px solid var(--phosphor-dim); padding: 15px; margin-bottom: 20px;
+            cursor: pointer; transition: background 0.2s; position: relative; font-size: 18px;
+        }
+        .unit-card:hover { background: rgba(0, 255, 255, 0.1); }
+        .unit-card.selected { border-color: var(--phosphor-cyan); background: rgba(0, 255, 255, 0.2); }
+        .unit-card.disabled { opacity: 0.3; pointer-events: none; }
+        .unit-cost { float: right; font-weight: bold; color: var(--phosphor-green); }
+
+        .btn {
+            background: transparent; border: 1px solid var(--phosphor-cyan); color: var(--phosphor-cyan);
+            padding: 15px; cursor: pointer; font-family: inherit; font-weight: bold; width: 100%; margin-top: 15px;
+            font-size: 18px; pointer-events: auto;
+        }
+        .btn:hover { background: var(--phosphor-cyan); color: var(--bg-color); }
+        .btn-hard { border-color: var(--phosphor-red); color: var(--phosphor-red); }
+
+        .overlay-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(1, 10, 21, 0.99); z-index: 1000; display: flex;
+            flex-direction: column; justify-content: flex-start; align-items: center;
+            text-align: center; padding: 40px; box-sizing: border-box; overflow-y: auto;
+        }
+        .overlay-screen.hidden { display: none !important; }
+
+        .info-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 100%; max-width: 1200px;
+            text-align: left; margin-top: 20px; margin-bottom: 20px;
+        }
+
+        .info-panel {
+            background: rgba(0, 255, 255, 0.05); border: 1px solid var(--phosphor-dim); padding: 18px;
+        }
+
+        .info-panel h3 {
+            margin-top: 0; border-bottom: 1px solid var(--phosphor-dim); padding-bottom: 5px;
+            color: var(--phosphor-cyan); font-size: 1.1em; letter-spacing: 2px;
+        }
+        
+        .unit-spec-table { width: 100%; font-size: 0.85em; border-collapse: collapse; margin-top: 10px; }
+        .unit-spec-table th { text-align: left; color: var(--phosphor-dim); border-bottom: 1px solid var(--phosphor-dim); padding: 4px; }
+        .unit-spec-table td { padding: 4px; border-bottom: 1px solid rgba(0,255,255,0.1); }
+
+        ul { padding-left: 18px; margin: 10px 0; font-size: 0.9em; }
+        li { margin-bottom: 6px; }
+
+        .scanlines {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: repeating-linear-gradient(0deg, rgba(0,0,0,0.05), rgba(0,0,0,0.05) 1px, transparent 1px, transparent 2px);
+            z-index: 2000; pointer-events: none;
+        }
+        
+        .close-overlay { position: absolute; top: 20px; right: 40px; font-size: 40px; cursor: pointer; pointer-events: auto; }
+
+        .sidebar-toggle, .ref-toggle {
+            position: absolute; right: 0; width: 45px; height: 90px;
+            background: rgba(1, 10, 21, 0.95); border: 2px solid var(--phosphor-cyan); border-right: none;
+            z-index: 400; cursor: pointer; display: flex; align-items: center; justify-content: center;
+            font-size: 24px; pointer-events: auto; color: var(--phosphor-cyan); flex-direction: column; transition: 0.3s;
+        }
+        .sidebar-toggle { top: 50%; transform: translateY(-50%); }
+        .ref-toggle { top: 35%; transform: translateY(-50%); }
+        .sidebar-toggle.open { right: 420px; }
+        .sidebar-toggle span, .ref-toggle span { font-size: 10px; margin-top: 5px; writing-mode: vertical-lr; text-orientation: upright; letter-spacing: 2px; }
+
+    </style>
+</head>
+<body>
+
+    <div class="crt-container" id="container">
+        <div class="viewport" id="viewport">
+            <div class="grid"></div>
+            <div class="map-layer">
+                <svg viewBox="0 0 2400 1680" id="tactical-svg">
+                    <defs>
+                        <pattern id="crosshatch" width="18" height="18" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+                            <line x1="0" y1="0" x2="0" y2="18" stroke="var(--phosphor-cyan)" stroke-width="2" opacity="0.3" />
+                        </pattern>
+                    </defs>
+
+                    <path class="landmass" d="M -24,-24 L 2424,-24 L 2424,1320 L 2040,1008 L 1752,456 L 1248,372 L 768,624 L -24,312 Z" />
+                    <path class="landmass" d="M -24,1704 L 2424,1704 L 2424,1680 L 1920,1632 L 1440,1320 L 1404,720 L 1236,864 L 1008,1080 L 720,1224 L 360,1320 L -24,1344 Z" />
+                    
+                    <polygon class="island" points="950,570 1230,440 1260,500 980,640" />
+                    <text class="label-small" x="1032" y="668">QESHM</text>
+                    <circle class="island" cx="1340" cy="560" r="25" />
+                    <text class="label-small" x="1370" y="570">LARAK</text>
+                    <circle class="island" cx="1420" cy="450" r="28" />
+                    <text class="label-small" x="1455" y="455">HORMUZ</text>
+                    <circle class="island" cx="850" cy="740" r="22" />
+                    <text class="label-small" x="885" y="745">GR. TUNB</text>
+                    <circle class="island" cx="790" cy="770" r="16" />
+                    <circle class="island" cx="750" cy="880" r="25" />
+                    <text class="label-small" x="650" y="885">ABU MUSA</text>
+                    <circle class="island" cx="580" cy="940" r="22" />
+                    <text class="label-small" x="510" y="945">SIRRI</text>
+                    <ellipse class="island" cx="240" cy="920" rx="50" ry="25" />
+                    <text class="label-small" x="220" y="965">KISH</text>
+
+                    <path class="border" d="M 1008,1080 L 1152,1320 L 1440,1320" />
+                    <path class="border" d="M 1152,1320 L 1056,1704" />
+
+                    <path class="shipping-lane" id="lane-path" d="M 120,1080 L 600,912 L 960,720 L 1272,600 L 1632,840 L 2280,1392" />
+                    <polygon fill="#00ffaa" points="2280,1392 2244,1380 2256,1392 2244,1404" />
+                    
+                    <text class="label-country" x="600" y="150">IRAN</text>
+                    <rect class="city-marker" x="1248" y="330" width="15" height="15" />
+                    <text class="label" x="1284" y="350">BANDAR-E 'ABBAS</text>
+                    <text class="label-country" x="1260" y="1180">OMAN</text>
+                    <circle class="city-marker" cx="792" cy="1296" r="9" />
+                    <text class="label" x="636" y="1284">DUBAYY</text>
+                    <circle class="city-marker" cx="504" cy="1440" r="9" />
+                    <text class="label" x="480" y="1488">ABU DHABI</text>
+                    <text class="label" x="480" y="1608">UNITED ARAB EMIRATES</text>
+                    <rect class="city-marker" x="1890" y="1620" width="15" height="15" />
+                    <text class="label" x="1750" y="1635">MUSCAT</text>
+
+                    <text class="label-water" x="1272" y="600">STRAIT OF HORMUZ</text>
+                    <text class="label-water" x="1800" y="1080">GULF OF OMAN</text>
+                    <text class="label-water" x="288" y="768">PERSIAN GULF</text>
+                </svg>
+            </div>
+            <canvas id="game-layer" width="2400" height="1680"></canvas>
+        </div>
+
+        <div class="hud-center">
+            <div>GLOBAL BRENT CRUDE</div>
+            <div id="ui-oil-price" class="oil-price">$85.00</div>
+            <div>BARREL / USD</div>
+        </div>
+
+        <div class="ui-overlay top-left">
+            <div>SYS_OP: <span id="sys-op">W.O.P.R.</span></div>
+            <div style="margin-top:10px; color:#00ffaa">FUNDS: $<span id="ui-funds">800</span>M</div>
+            <div>WAVE: <span id="ui-wave">1</span></div>
+        </div>
+        
+        <div class="ui-overlay top-right">
+            <div>DEFCON 2</div>
+            <div id="clock">00:00:00Z</div>
+        </div>
+
+        <div class="sidebar-toggle" id="btn-sidebar">◄<span>UNITS</span></div>
+        <div class="ref-toggle" id="btn-ref">ⓘ<span>REF</span></div>
+
+        <div class="sidebar" id="sidebar">
+            <h2 style="border-bottom: 2px solid var(--phosphor-cyan); padding-bottom: 10px; margin-top: 0;">DEFENSE GRID</h2>
+            <div style="font-size: 10px; margin-bottom: 10px; opacity: 0.7;">HOTKEYS: [1-6] SELECT | [S] SIDEBAR | [R] REF | [ESC] ABORT</div>
+            <div id="unit-list"></div>
+        </div>
+
+        <template id="full-reference-content">
+            <h1 style="letter-spacing: 12px; margin-bottom: 5px; font-size: 3em;">STRATEGIC READOUT</h1>
+            <div class="info-grid">
+                <div class="info-panel">
+                    <h3>MISSION OBJECTIVE: HORMUZ BLOCKADE</h3>
+                    <ul>
+                        <li><strong>PRIMARY:</strong> Harass commercial shipping in the TR7 lane to drive Crude prices to <strong>$200/barrel</strong>.</li>
+                        <li><strong>SECONDARY:</strong> Neutralize Escort Carriers for a <strong>$200M Strategic Bounty</strong>.</li>
+                        <li><strong>FAIL CONDITION:</strong> Crude price falls below <strong>$70/barrel</strong>.</li>
+                    </ul>
+                </div>
+                <div class="info-panel">
+                    <h3>ECONOMIC MODEL: LOGARITHMIC FUNDING</h3>
+                    <ul>
+                        <li>Funding is derived from regional panic levels. The relationship between <strong>Oil Price (P)</strong> and <strong>Funds (F)</strong> follows a logarithmic curve: $F \propto \ln(P)$.</li>
+                        <li><strong>IMPLICATION:</strong> Initial price spikes yield maximum capital; as prices stabilize at high levels, additional funding suffers from <strong>diminishing marginal utility</strong>.</li>
+                    </ul>
+                </div>
+                <div class="info-panel" style="grid-column: span 2;">
+                    <h3>UNIT TYPE SPECIFICATIONS (v1.6.5)</h3>
+                    <table class="unit-spec-table">
+                        <thead>
+                            <tr><th>UNIT</th><th>COST</th><th>HP</th><th>DPS</th><th>SIG</th><th>SPECIAL</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>Silkworm Battery</td><td>$200M</td><td>450</td><td>50</td><td>HEAVY</td><td>Coastal Siege Platform</td></tr>
+                            <tr><td>Misagh-2 SAM</td><td>$120M</td><td>250</td><td>20</td><td>MED</td><td>Anti-Missile Specialist</td></tr>
+                            <tr><td>Shahed Drone</td><td>$60M</td><td>80</td><td>120</td><td>LOW</td><td>Evasion (0.9), 3-Strike Limit</td></tr>
+                            <tr><td>Mine Layer</td><td>$100M</td><td>280</td><td>300</td><td>MED</td><td>Passive Denial (Max 4 Mines)</td></tr>
+                            <tr><td>Zolfaghar FAB</td><td>$75M</td><td>100</td><td>20</td><td>LOW</td><td>Evasion (0.9), Naval Interceptor</td></tr>
+                            <tr><td>Ghadir Sub</td><td>$250M</td><td>200</td><td>65</td><td>STEALTH</td><td>Immune to Cruise Missiles</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="info-panel">
+                    <h3>THREAT ASSESSMENT</h3>
+                    <ul>
+                        <li><strong>COMMERCIALS:</strong> Unarmed. Destroying increases price. Leaking decreases price.</li>
+                        <li><strong>ESCORT CARRIERS:</strong> Armed. High HP. Targeted destruction grants massive funding.</li>
+                        <li><strong>CRUISE MISSILES:</strong> Automated retaliation. Targets highest signature units. SAM units required for interception.</li>
+                    </ul>
+                </div>
+            </div>
+        </template>
+
+        <div class="overlay-screen" id="screen-intro">
+            <div id="intro-target"></div>
+            <div style="display: flex; gap: 20px; width: 600px; margin-top: 20px;">
+                <button class="btn" id="btn-normal">INITIALIZE (NORMAL)</button>
+                <button class="btn btn-hard" id="btn-hard">INITIALIZE (HARD MODE)</button>
+            </div>
+        </div>
+
+        <div class="overlay-screen hidden" id="screen-ref" style="z-index: 2000;">
+            <div class="close-overlay" id="close-ref">×</div>
+            <div id="ref-target"></div>
+        </div>
+
+        <div class="overlay-screen hidden" id="screen-end">
+            <h1 id="end-title" style="font-size: 5em;">SYSTEM HALTED</h1>
+            <p id="end-message" style="max-width: 800px; font-size: 1.5em; margin-bottom: 30px;"></p>
+            <button class="btn" onclick="window.location.reload()" style="width:350px">REBOOT SYSTEM</button>
+        </div>
+
+        <div class="scanlines"></div>
+    </div>
+
+<script>
+/**
+ * W.O.P.R. ENGINE v1.6.5
+ * MAP SYNCED TO UPLOADED GEOMETRY v4.9
+ */
+
+const BASE_UNITS = [
+    { id: 0, name: 'Silkworm Battery', icon: '▲', cost: 200, range: 750, dps: 50, cd: 2.5, type: 'land', hp: 450, signature: 'heavy' },
+    { id: 1, name: 'Misagh-2 SAM', icon: '✚', cost: 120, range: 650, dps: 20, cd: 1.2, type: 'land', hp: 250, antiMissile: true, signature: 'med' },
+    { id: 2, name: 'Shahed Drone', icon: '⬡', cost: 60, range: 900, dps: 120, cd: 4.0, type: 'land', hp: 80, evasion: 0.9, signature: 'low', limitedAmmo: 3 },
+    { id: 3, name: 'Mine Layer', icon: '⊙', cost: 100, range: 550, dps: 300, cd: 10.0, type: 'land', maxMines: 4, hp: 280, signature: 'med' },
+    { id: 4, name: 'Zolfaghar FAB', icon: '➤', cost: 75, range: 350, dps: 20, cd: 1.0, type: 'water', hp: 100, evasion: 0.9, signature: 'low' },
+    { id: 5, name: 'Ghadir Sub', icon: '▤', cost: 250, range: 500, dps: 65, cd: 2.2, type: 'water', hp: 200, signature: 'stealth' }
+];
+
+let UNIT_TYPES = JSON.parse(JSON.stringify(BASE_UNITS));
+let GAME = { state: 'intro', oil: 85, funds: 800, wave: 1, timer: 10, lastTick: performance.now(), hardMode: false, selectedIdx: -1 };
+let ENTS = { units: [], enemies: [], projectiles: [], enemyProjectiles: [], strategicMissiles: [] };
+
+const canvas = document.getElementById('game-layer');
+const ctx = canvas.getContext('2d');
+const viewport = document.getElementById('viewport');
+const container = document.getElementById('container');
+const lanePath = document.getElementById('lane-path');
+
+// Viewport State
+let offsetX = -400, offsetY = -200, zoom = 0.6;
+let isPanning = false, startX, startY;
+
+function updateViewportTransform() {
+    viewport.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${zoom})`;
+}
+
+container.onwheel = (e) => {
+    e.preventDefault();
+    const ds = e.deltaY > 0 ? 0.9 : 1.1;
+    const newZoom = Math.min(Math.max(zoom * ds, 0.2), 2.0);
+    const mouseX = e.clientX;
+    const mouseY = e.clientY;
+    offsetX = mouseX - (mouseX - offsetX) * (newZoom / zoom);
+    offsetY = mouseY - (mouseY - offsetY) * (newZoom / zoom);
+    zoom = newZoom;
+    updateViewportTransform();
+};
+
+container.onmousedown = (e) => {
+    if (e.target.closest('.sidebar') || e.target.closest('.btn') || e.target.closest('.sidebar-toggle') || e.target.closest('.ref-toggle')) return;
+    if (GAME.selectedIdx !== -1) {
+        placeUnit(e);
+        return;
+    }
+    isPanning = true;
+    startX = e.clientX - offsetX;
+    startY = e.clientY - offsetY;
+};
+
+window.onmousemove = (e) => {
+    if (!isPanning) return;
+    offsetX = e.clientX - startX;
+    offsetY = e.clientY - startY;
+    updateViewportTransform();
+};
+
+window.onmouseup = () => isPanning = false;
+
+window.onkeydown = (e) => {
+    const key = e.key.toLowerCase();
+    if (GAME.state === 'intro') return;
+    if (key >= '1' && key <= '6') selectBuild(parseInt(key) - 1);
+    if (key === 'escape') cancelBuild();
+    if (key === 's') toggleSidebar();
+    if (key === 'r') toggleRef();
+};
+
+function selectBuild(i) {
+    if (GAME.funds < UNIT_TYPES[i].cost) return;
+    GAME.selectedIdx = i;
+    updateUI();
+}
+
+function cancelBuild() {
+    GAME.selectedIdx = -1;
+    updateUI();
+}
+
+function placeUnit(e) {
+    const rect = container.getBoundingClientRect();
+    const wx = (e.clientX - rect.left - offsetX) / zoom;
+    const wy = (e.clientY - rect.top - offsetY) / zoom;
+    const def = UNIT_TYPES[GAME.selectedIdx];
+    GAME.funds -= def.cost;
+    ENTS.units.push({ ...def, x: wx, y: wy, hp_max: def.hp, cd_base: def.cd });
+    GAME.selectedIdx = -1;
+    updateUI();
+}
+
+function calculateWaveFunding() {
+    const baseOil = 70;
+    const multiplier = GAME.hardMode ? 180 : 450;
+    const normalizedPrice = Math.max(1.1, GAME.oil / baseOil);
+    return Math.max(50, Math.floor(Math.log(normalizedPrice) * multiplier));
+}
+
+function populateReferenceContent() {
+    const template = document.getElementById('full-reference-content');
+    if (template) {
+        const content = template.content.cloneNode(true);
+        const content2 = content.cloneNode(true);
+        document.getElementById('intro-target').appendChild(content);
+        document.getElementById('ref-target').appendChild(content2);
+    }
+}
+
+class Enemy {
+    constructor(type) {
+        this.type = type; this.dist = 0;
+        this.maxDist = lanePath.getTotalLength();
+        this.speed = (type === 'small' ? 65 : type === 'med' ? 50 : type === 'large' ? 40 : 85);
+        const scale = (1 + (GAME.wave * 0.2)) * (GAME.hardMode ? 2.0 : 1.0);
+        this.hp = (type === 'small' ? 150 : type === 'med' ? 350 : type === 'large' ? 800 : 300) * scale;
+        this.maxHp = this.hp;
+        const pt = lanePath.getPointAtLength(0);
+        this.x = pt.x; this.y = pt.y;
+        this.cd = 0; this.range = 600;
+    }
+    update(dt) {
+        this.dist += this.speed * dt;
+        if (this.dist >= this.maxDist) return true;
+        const pt = lanePath.getPointAtLength(this.dist);
+        this.x = pt.x; this.y = pt.y;
+        if (this.type === 'escort') {
+            this.cd -= dt;
+            if (this.cd <= 0) {
+                const target = ENTS.units.find(u => Math.hypot(u.x - this.x, u.y - this.y) < this.range);
+                if (target) {
+                    ENTS.enemyProjectiles.push({ x: this.x, y: this.y, target, dmg: 25 + (GAME.wave * 3), speed: 550 });
+                    this.cd = 2.0;
+                }
+            }
+        }
+        return false;
+    }
+}
+
+function update(dt) {
+    if (GAME.state === 'build') {
+        GAME.timer -= dt;
+        if (GAME.timer <= 0) {
+            GAME.state = 'wave';
+            let count = 8 + Math.floor(GAME.wave * 2.5);
+            for (let i=0; i<count; i++) {
+                setTimeout(() => { if (GAME.state === 'wave') ENTS.enemies.push(new Enemy(Math.random() > 0.85 ? 'large' : (Math.random() > 0.6 ? 'med' : (Math.random() > 0.4 ? 'escort' : 'small')))); }, i * 1500);
+            }
+        }
+    }
+    
+    if (GAME.state === 'wave' && ENTS.enemies.length === 0 && GAME.timer < -10) {
+        GAME.funds += calculateWaveFunding();
+        GAME.wave++; GAME.state = 'build'; GAME.timer = 15; updateUI();
+    }
+
+    for (let i = ENTS.enemies.length - 1; i >= 0; i--) {
+        const e = ENTS.enemies[i];
+        if (e.update(dt)) {
+            if (e.type !== 'escort') GAME.oil -= (e.type === 'large' ? 15 : 8);
+            ENTS.enemies.splice(i, 1); updateUI();
+        } else if (e.hp <= 0) {
+            if (e.type === 'escort') GAME.funds += 200; else GAME.oil += (e.type === 'large' ? 18 : 7);
+            ENTS.enemies.splice(i, 1); updateUI();
+        }
+    }
+
+    ENTS.units.forEach(u => {
+        u.cd -= dt;
+        if (u.cd <= 0) {
+            const targets = (u.antiMissile && ENTS.strategicMissiles.length > 0) ? ENTS.strategicMissiles : ENTS.enemies;
+            const inRange = targets.filter(e => Math.hypot(e.x - u.x, e.y - u.y) < u.range);
+            if (inRange.length > 0) {
+                ENTS.projectiles.push({ x: u.x, y: u.y, target: inRange[0], dmg: u.dps, owner: u, speed: 1000 });
+                u.cd = u.cd_base;
+            }
+        }
+    });
+
+    for (let i = ENTS.projectiles.length - 1; i >= 0; i--) {
+        const p = ENTS.projectiles[i];
+        if (!p.target || p.target.hp <= 0) { ENTS.projectiles.splice(i, 1); continue; }
+        const dx = p.target.x - p.x; const dy = p.target.y - p.y;
+        const d = Math.hypot(dx, dy);
+        if (d < 30) { p.target.hp -= p.dmg; if (p.owner.limitedAmmo) p.owner.hp -= (p.owner.hp_max/p.owner.limitedAmmo)+1; ENTS.projectiles.splice(i, 1); }
+        else { p.x += (dx/d)*p.speed*dt; p.y += (dy/d)*p.speed*dt; }
+    }
+
+    if (Math.random() < 0.005 * GAME.wave && ENTS.units.length > 0) {
+        const targets = ENTS.units.filter(u => u.signature !== 'stealth');
+        if (targets.length > 0) {
+            const t = targets[Math.floor(Math.random() * targets.length)];
+            ENTS.strategicMissiles.push({ x: Math.random()*2400, y: -200, target: t, hp: 1, speed: 400 });
+        }
+    }
+
+    for (let i = ENTS.strategicMissiles.length - 1; i >= 0; i--) {
+        const m = ENTS.strategicMissiles[i];
+        const dx = m.target.x - m.x, dy = m.target.y - m.y, d = Math.hypot(dx, dy);
+        if (d < 20) { m.target.hp -= 1000; ENTS.strategicMissiles.splice(i, 1); }
+        else { m.x += (dx/d)*m.speed*dt; m.y += (dy/d)*m.speed*dt; }
+    }
+
+    ENTS.units = ENTS.units.filter(u => u.hp > 0);
+    if (GAME.state !== 'intro' && GAME.state !== 'end') {
+        if (GAME.oil < 70) endGame(false);
+        if (GAME.oil >= 200) endGame(true);
+    }
+}
+
+function draw() {
+    ctx.clearRect(0, 0, 2400, 1680);
+    ENTS.units.forEach(u => {
+        ctx.strokeStyle = '#0ff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(u.x, u.y, 35, 0, Math.PI*2); ctx.stroke();
+        ctx.fillStyle = '#0ff'; ctx.font = '40px monospace'; ctx.textAlign = 'center'; ctx.fillText(u.icon, u.x, u.y+15);
+        ctx.fillStyle = '#f00'; ctx.fillRect(u.x-30, u.y-50, 60, 6);
+        ctx.fillStyle = '#0f0'; ctx.fillRect(u.x-30, u.y-50, 60*(u.hp/u.hp_max), 6);
+    });
+    
+    ENTS.enemies.forEach(e => {
+        ctx.strokeStyle = e.type === 'escort' ? '#fa0' : '#f33'; ctx.strokeRect(e.x-40, e.y-20, 80, 40);
+        ctx.fillStyle = '#f00'; ctx.fillRect(e.x-40, e.y-35, 80, 5);
+        ctx.fillStyle = '#f33'; ctx.fillRect(e.x-40, e.y-35, 80*(e.hp/e.maxHp), 5);
+    });
+    ENTS.projectiles.forEach(p => { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI*2); ctx.fill(); });
+    ENTS.strategicMissiles.forEach(m => { ctx.fillStyle = '#f00'; ctx.beginPath(); ctx.moveTo(m.x, m.y); ctx.lineTo(m.x-10, m.y+20); ctx.lineTo(m.x+10, m.y+20); ctx.fill(); });
+}
+
+function updateUI() {
+    document.getElementById('ui-oil-price').innerText = `$${GAME.oil.toFixed(2)}`;
+    document.getElementById('ui-funds').innerText = GAME.funds;
+    document.getElementById('ui-wave').innerText = GAME.wave;
+    let html = '';
+    UNIT_TYPES.forEach((u, i) => {
+        html += `<div class="unit-card ${GAME.funds < u.cost ? 'disabled' : ''} ${GAME.selectedIdx === i ? 'selected' : ''}" onclick="selectBuild(${i})">
+            <span class="unit-cost">$${u.cost}M</span>
+            <strong>${u.icon} ${u.name}</strong><br>
+            <small>HP: ${u.hp} | DPS: ${u.dps} | SIG: ${u.signature.toUpperCase()}</small>
+        </div>`;
+    });
+    document.getElementById('unit-list').innerHTML = html;
+}
+
+function toggleSidebar() {
+    const s = document.getElementById('sidebar');
+    const open = s.classList.toggle('open');
+    document.getElementById('btn-sidebar').classList.toggle('open', open);
+}
+
+function toggleRef() {
+    const r = document.getElementById('screen-ref');
+    r.classList.toggle('hidden');
+}
+
+function endGame(win) {
+    GAME.state = 'end';
+    document.getElementById('screen-end').classList.remove('hidden');
+    document.getElementById('end-title').innerText = win ? 'STRATEGIC VICTORY' : 'MISSION FAILURE';
+    document.getElementById('end-message').innerText = win ? 'Crude reached $200. Global markets have collapsed.' : 'Crude dropped below $70. The blockade has been broken.';
+}
+
+function init() {
+    populateReferenceContent();
+    updateViewportTransform();
+    document.getElementById('btn-normal').onclick = () => startGame(false);
+    document.getElementById('btn-hard').onclick = () => startGame(true);
+    document.getElementById('btn-ref').onclick = toggleRef;
+    document.getElementById('close-ref').onclick = toggleRef;
+    document.getElementById('btn-sidebar').onclick = toggleSidebar;
+    
+    setInterval(() => {
+        const now = new Date();
+        document.getElementById('clock').innerText = now.toISOString().split('T')[1].split('.')[0] + 'Z';
+    }, 1000);
+
+    requestAnimationFrame(loop);
+}
+
+function startGame(hard) {
+    GAME.hardMode = hard;
+    document.getElementById('screen-intro').classList.add('hidden');
+    GAME.state = 'build'; GAME.timer = 15;
+    if (hard) { GAME.funds = 400; UNIT_TYPES.forEach(u => u.hp = Math.floor(u.hp * 0.5)); }
+    updateUI();
+}
+
+function loop() {
+    const now = performance.now(), dt = (now - GAME.lastTick) / 1000;
+    GAME.lastTick = now;
+    if (GAME.state !== 'intro' && GAME.state !== 'end') update(dt);
+    draw();
+    requestAnimationFrame(loop);
+}
+
+window.onload = init;
+</script>
+</body>
+</html>

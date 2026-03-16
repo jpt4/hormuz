@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>WOPR STRAIT OF HORMUZ DEFENSE v0.1</title>
+<style>
+body{background:#000;color:#0ff;font-family:monospace;margin:0;overflow:hidden}
+#viewport{position:relative;width:100vw;height:100vh;overflow:hidden}
+#map{position:absolute;width:2400px;height:1680px}
+#game-layer{position:absolute;top:0;left:0;width:2400px;height:1680px}
+#ui{position:absolute;top:10px;left:10px;font-size:18px;z-index:10}
+</style>
+</head>
+<body>
+<div id="viewport">
+
+<svg id="map" viewBox="0 0 2400 1680">
+
+<!-- ocean -->
+<rect x="0" y="0" width="2400" height="1680" fill="#03131a"/>
+
+<!-- grid lines to match WOPR style -->
+<g stroke="#073642" stroke-width="1" opacity="0.35">
+<line x1="0" y1="0" x2="0" y2="1680"/>
+<line x1="120" y1="0" x2="120" y2="1680"/>
+<line x1="240" y1="0" x2="240" y2="1680"/>
+<line x1="360" y1="0" x2="360" y2="1680"/>
+<line x1="480" y1="0" x2="480" y2="1680"/>
+<line x1="600" y1="0" x2="600" y2="1680"/>
+<line x1="720" y1="0" x2="720" y2="1680"/>
+<line x1="840" y1="0" x2="840" y2="1680"/>
+<line x1="960" y1="0" x2="960" y2="1680"/>
+<line x1="1080" y1="0" x2="1080" y2="1680"/>
+<line x1="1200" y1="0" x2="1200" y2="1680"/>
+<line x1="1320" y1="0" x2="1320" y2="1680"/>
+<line x1="1440" y1="0" x2="1440" y2="1680"/>
+<line x1="1560" y1="0" x2="1560" y2="1680"/>
+<line x1="1680" y1="0" x2="1680" y2="1680"/>
+<line x1="1800" y1="0" x2="1800" y2="1680"/>
+<line x1="1920" y1="0" x2="1920" y2="1680"/>
+<line x1="2040" y1="0" x2="2040" y2="1680"/>
+<line x1="2160" y1="0" x2="2160" y2="1680"/>
+<line x1="2280" y1="0" x2="2280" y2="1680"/>
+
+<line x1="0" y1="0" x2="2400" y2="0"/>
+<line x1="0" y1="120" x2="2400" y2="120"/>
+<line x1="0" y1="240" x2="2400" y2="240"/>
+<line x1="0" y1="360" x2="2400" y2="360"/>
+<line x1="0" y1="480" x2="2400" y2="480"/>
+<line x1="0" y1="600" x2="2400" y2="600"/>
+<line x1="0" y1="720" x2="2400" y2="720"/>
+<line x1="0" y1="840" x2="2400" y2="840"/>
+<line x1="0" y1="960" x2="2400" y2="960"/>
+<line x1="0" y1="1080" x2="2400" y2="1080"/>
+<line x1="0" y1="1200" x2="2400" y2="1200"/>
+<line x1="0" y1="1320" x2="2400" y2="1320"/>
+<line x1="0" y1="1440" x2="2400" y2="1440"/>
+<line x1="0" y1="1560" x2="2400" y2="1560"/>
+</g>
+
+<!-- Iranian coast (stylized approximation) -->
+<path d="M0 780 L120 760 L260 730 L420 700 L620 660 L820 630 L980 610 L1160 600 L1320 620 L1500 660 L1650 720 L1800 820 L1900 900 L2000 980 L2100 1080 L2200 1180 L2400 1300 L2400 0 L0 0 Z"
+fill="#061d16" stroke="#0aa" stroke-width="2" opacity="0.9"/>
+
+<!-- Arabian peninsula coast (stylized) -->
+<path d="M0 1680 L0 1200 L200 1180 L380 1150 L560 1110 L760 1080 L940 1040 L1100 1020 L1260 1010 L1400 1040 L1540 1100 L1700 1180 L1880 1280 L2060 1400 L2240 1520 L2400 1680 Z"
+fill="#061d16" stroke="#0aa" stroke-width="2" opacity="0.9"/>
+
+<!-- islands (Hormuz/Qeshm approximations) -->
+<ellipse cx="1100" cy="880" rx="90" ry="30" fill="#08332a" stroke="#0aa"/>
+<ellipse cx="1240" cy="900" rx="40" ry="18" fill="#08332a" stroke="#0aa"/>
+<ellipse cx="1310" cy="940" rx="30" ry="14" fill="#08332a" stroke="#0aa"/>
+
+<!-- shipping lane TR-7 -->
+<path id="TR7" d="M120 1080 L600 912 L960 720 L1272 600 L1632 840 L2280 1392"
+stroke="#33f0ff" fill="none" stroke-width="10" opacity="0.85" stroke-dasharray="18 12"/>
+
+<!-- label -->
+<text x="1250" y="760" fill="#33f0ff" font-size="28" opacity="0.8" text-anchor="middle">STRAIT OF HORMUZ</text>
+
+</svg>
+
+<canvas id="game-layer" width="2400" height="1680"></canvas>
+
+<div id="ui">
+<div>Oil Price: <span id="oil">85</span></div>
+<div>Funds: <span id="funds">800</span></div>
+<div>Wave: <span id="wave">1</span></div>
+</div>
+
+</div>
+
+<script>
+
+const canvas=document.getElementById("game-layer")
+const ctx=canvas.getContext("2d")
+const path=document.getElementById("TR7")
+
+const oilUI=document.getElementById("oil")
+const fundsUI=document.getElementById("funds")
+const waveUI=document.getElementById("wave")
+
+const GAME={
+ oil:85,
+ funds:800,
+ wave:1,
+ enemies:[],
+ towers:[],
+ projectiles:[]
+}
+
+const tankerTypes={
+ small:{hp:100,factor:1},
+ medium:{hp:220,factor:2},
+ large:{hp:420,factor:3}
+}
+
+const pathLength=path.getTotalLength()
+
+function getPoint(t){
+ return path.getPointAtLength(t*pathLength)
+}
+
+function spawnTanker(type){
+ GAME.enemies.push({
+  type,
+  hp:tankerTypes[type].hp,
+  progress:0,
+  speed:0.03 + GAME.wave*0.01,
+  x:0,
+  y:0
+ })
+}
+
+function spawnWave(){
+ const count=GAME.wave*3
+
+ for(let i=0;i<count;i++){
+  setTimeout(()=>spawnTanker("small"),i*1000)
+ }
+}
+
+function placeTower(x,y){
+ GAME.towers.push({
+  x,y,
+  range:720,
+  cooldown:0
+ })
+}
+
+canvas.addEventListener("click",e=>{
+
+ const rect=canvas.getBoundingClientRect()
+
+ const scaleX=canvas.width/rect.width
+ const scaleY=canvas.height/rect.height
+
+ const x=(e.clientX-rect.left)*scaleX
+ const y=(e.clientY-rect.top)*scaleY
+
+ placeTower(x,y)
+})
+
+function update(dt){
+
+ oilUI.textContent=Math.round(GAME.oil)
+ fundsUI.textContent=GAME.funds
+ waveUI.textContent=GAME.wave
+
+ GAME.enemies.forEach(e=>{
+
+  e.progress+=e.speed*dt*0.02
+
+  const p=getPoint(e.progress)
+
+  e.x=p.x
+  e.y=p.y
+
+  if(e.progress>=1){
+   tankerEscape(e)
+  }
+ })
+
+ GAME.towers.forEach(t=>{
+
+  t.cooldown-=dt
+
+  if(t.cooldown<=0){
+
+   const target=findTarget(t)
+
+   if(target){
+
+    GAME.projectiles.push({
+     x:t.x,
+     y:t.y,
+     target
+    })
+
+    t.cooldown=3
+   }
+
+  }
+
+ })
+
+ GAME.projectiles.forEach(p=>{
+
+  if(!p.target || p.target.hp<=0){p.dead=true;return}
+
+  const dx=p.target.x-p.x
+  const dy=p.target.y-p.y
+
+  const d=Math.hypot(dx,dy)
+
+  if(d<1){p.dead=true;return}
+
+  p.x+=dx/d*400*dt
+  p.y+=dy/d*400*dt
+
+  if(d<10){
+   hit(p.target)
+   p.dead=true
+  }
+ })
+
+ GAME.projectiles=GAME.projectiles.filter(p=>!p.dead)
+
+ GAME.enemies=GAME.enemies.filter(e=>e.hp>0)
+}
+
+function findTarget(t){
+
+ for(const e of GAME.enemies){
+
+  const d=Math.hypot(e.x-t.x,e.y-t.y)
+
+  if(d<t.range) return e
+
+ }
+
+}
+
+function hit(e){
+
+ e.hp-=30
+
+ if(e.hp<=0){
+  tankerDestroyed(e)
+ }
+
+}
+
+function tankerDestroyed(e){
+
+ const f=tankerTypes[e.type].factor
+
+ GAME.oil+=f*3
+
+ if(GAME.oil>180) GAME.oil=180
+
+}
+
+function tankerEscape(e){
+
+ const f=tankerTypes[e.type].factor
+
+ GAME.oil-=f*2
+
+ if(GAME.oil<70){
+  alert("COALITION FORCES GUARANTEE SAFE PASSAGE")
+  location.reload()
+ }
+
+}
+
+function draw(){
+
+ ctx.clearRect(0,0,canvas.width,canvas.height)
+
+ // enemies
+
+ GAME.enemies.forEach(e=>{
+
+  ctx.fillStyle="#0ff"
+  ctx.beginPath()
+  ctx.arc(e.x,e.y,8,0,Math.PI*2)
+  ctx.fill()
+
+ })
+
+ // towers
+
+ GAME.towers.forEach(t=>{
+
+  ctx.strokeStyle="#ff0"
+
+  ctx.beginPath()
+  ctx.moveTo(t.x,t.y-10)
+  ctx.lineTo(t.x+8,t.y+8)
+  ctx.lineTo(t.x-8,t.y+8)
+  ctx.closePath()
+  ctx.stroke()
+
+ })
+
+ // projectiles
+
+ GAME.projectiles.forEach(p=>{
+
+  ctx.fillStyle="#f00"
+  ctx.fillRect(p.x-2,p.y-2,4,4)
+
+ })
+
+}
+
+let last=0
+
+function loop(ts){
+
+ const dt=(ts-last)/1000
+ last=ts
+
+ update(dt)
+ draw()
+
+ requestAnimationFrame(loop)
+
+}
+
+spawnWave()
+requestAnimationFrame(loop)
+
+</script>
+</body>
+</html>

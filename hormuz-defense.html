@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>W.O.P.R. - HORMUZ DEFENSE v5.1</title>
+    <style>
+        /* STYLING SYSTEM: Original phosphor terminal aesthetic preserved exactly */
+        :root {
+            --phosphor-cyan: #00ffff;
+            --phosphor-dim: rgba(0, 255, 255, 0.25);
+            --bg-color: #010a15;
+            --glow: drop-shadow(0 0 5px var(--phosphor-cyan));
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            color: var(--phosphor-cyan);
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* Main CRT Display Frame - unchanged */
+        .crt-container {
+            position: relative;
+            width: 1500px; 
+            height: 1050px;
+            background-color: var(--bg-color);
+            border: 2px solid var(--phosphor-cyan);
+            box-shadow: 0 0 20px var(--phosphor-cyan), inset 0 0 40px rgba(0, 255, 255, 0.2);
+            overflow: hidden;
+            cursor: grab;
+        }
+
+        .crt-container:active { cursor: grabbing; }
+
+        .viewport {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            will-change: transform;
+        }
+
+        .grid {
+            position: absolute;
+            top: -2000px;
+            left: -2000px;
+            width: 6000px;
+            height: 6000px;
+            background-image: 
+                linear-gradient(var(--phosphor-dim) 1px, transparent 1px),
+                linear-gradient(90deg, var(--phosphor-dim) 1px, transparent 1px);
+            background-size: 80px 80px;
+            z-index: 1;
+        }
+
+        .map-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+        }
+
+        svg {
+            width: 100%;
+            height: 100%;
+            filter: var(--glow);
+        }
+
+        .landmass {
+            fill: url(#crosshatch);
+            stroke: var(--phosphor-cyan);
+            stroke-width: 4;
+            stroke-linejoin: round;
+        }
+        
+        .island {
+            fill: url(#crosshatch);
+            stroke: var(--phosphor-cyan);
+            stroke-width: 3;
+            transition: stroke-width 0.2s;
+            cursor: pointer;
+        }
+
+        .island:hover { stroke-width: 6; }
+
+        .border {
+            fill: none;
+            stroke: var(--phosphor-cyan);
+            stroke-width: 2.5;
+            stroke-dasharray: 15, 15;
+        }
+
+        .shipping-lane {
+            fill: none;
+            stroke: #00ffaa;
+            stroke-width: 4;
+            stroke-dasharray: 25, 20;
+            opacity: 0.8;
+        }
+
+        .city-marker {
+            fill: var(--bg-color);
+            stroke: var(--phosphor-cyan);
+            stroke-width: 4;
+        }
+
+        .label {
+            fill: var(--phosphor-cyan);
+            font-size: 24px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            user-select: none;
+        }
+
+        .label-country {
+            fill: var(--phosphor-cyan);
+            font-size: 32px;
+            font-weight: 900;
+            letter-spacing: 4px;
+            user-select: none;
+        }
+
+        .label-water {
+            font-size: 28px;
+            fill: var(--phosphor-cyan);
+            font-style: italic;
+            opacity: 0.6;
+            letter-spacing: 7px;
+        }
+
+        .label-small {
+            font-size: 16px;
+            fill: var(--phosphor-cyan);
+            background: var(--bg-color);
+            pointer-events: none;
+        }
+
+        .ui-overlay {
+            position: absolute;
+            z-index: 10;
+            padding: 25px;
+            pointer-events: none;
+            text-shadow: 0 0 6px var(--phosphor-cyan);
+            font-size: 20px;
+        }
+
+        .top-left { top: 0; left: 0; }
+        .top-right { top: 0; right: 0; text-align: right; }
+        .bottom-left { bottom: 0; left: 0; }
+        .bottom-right { bottom: 0; right: 0; text-align: right; }
+
+        .blink { animation: blinker 1.2s steps(2, start) infinite; }
+        @keyframes blinker { to { visibility: hidden; } }
+
+        .scanlines {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(0, 0, 0, 0.1),
+                rgba(0, 0, 0, 0.1) 1px,
+                transparent 1px,
+                transparent 2px
+            );
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        .radar-sweep {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 3000px;
+            height: 6px;
+            background: linear-gradient(90deg, transparent, var(--phosphor-cyan));
+            transform-origin: left center;
+            z-index: 5;
+            opacity: 0.2;
+            animation: sweep 10s infinite linear;
+            pointer-events: none;
+        }
+
+        @keyframes sweep {
+            from { transform: translateY(-50%) rotate(0deg); }
+            to { transform: translateY(-50%) rotate(360deg); }
+        }
+
+        .controls-hint {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 255, 255, 0.1);
+            border: 1px solid var(--phosphor-cyan);
+            padding: 5px 15px;
+            font-size: 12px;
+            z-index: 10;
+            pointer-events: none;
+            opacity: 0.5;
+        }
+
+        /* Game UI - phosphor style */
+        .shop-panel {
+            position: absolute;
+            top: 180px;
+            right: 25px;
+            width: 260px;
+            background: rgba(1, 10, 21, 0.85);
+            border: 2px solid var(--phosphor-cyan);
+            padding: 12px;
+            z-index: 30;
+            box-shadow: 0 0 15px var(--phosphor-cyan);
+            pointer-events: auto;
+        }
+
+        .tower-option {
+            background: rgba(0, 255, 255, 0.08);
+            border: 1px solid var(--phosphor-cyan);
+            margin-bottom: 8px;
+            padding: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 14px;
+        }
+
+        .tower-option:hover, .tower-option.selected {
+            background: rgba(0, 255, 255, 0.25);
+            box-shadow: 0 0 12px var(--phosphor-cyan);
+        }
+
+        .status-bar {
+            position: absolute;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(1, 10, 21, 0.9);
+            border: 1px solid var(--phosphor-cyan);
+            padding: 8px 20px;
+            font-size: 18px;
+            z-index: 25;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        .phase-indicator {
+            position: absolute;
+            top: 125px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(1, 10, 21, 0.95);
+            border: 2px solid var(--phosphor-cyan);
+            padding: 8px 28px;
+            font-size: 19px;
+            z-index: 30;
+            letter-spacing: 3px;
+        }
+
+        .start-wave-btn {
+            position: absolute;
+            top: 185px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 17, 34, 0.95);
+            border: 3px solid var(--phosphor-cyan);
+            color: var(--phosphor-cyan);
+            padding: 14px 42px;
+            font-size: 20px;
+            cursor: pointer;
+            z-index: 35;
+            letter-spacing: 3px;
+            transition: all 0.2s;
+        }
+
+        .start-wave-btn:hover {
+            box-shadow: 0 0 20px var(--phosphor-cyan);
+            background: rgba(0, 255, 255, 0.15);
+        }
+
+        .game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(1, 10, 21, 0.95);
+            border: 3px solid var(--phosphor-cyan);
+            padding: 40px;
+            text-align: center;
+            z-index: 100;
+            display: none;
+            color: #ff0000;
+            font-size: 28px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="crt-container" id="container">
+        <div class="viewport" id="viewport">
+            <div class="grid"></div>
+            <div class="radar-sweep"></div>
+
+            <div class="map-layer">
+                <!-- SVG TACTICAL LAYER: Original map EXACTLY as provided - no changes -->
+                <svg id="map-svg" viewBox="0 0 2400 1680">
+                    <defs>
+                        <!-- Pattern used for 'land' fill to represent radar density -->
+                        <pattern id="crosshatch" width="18" height="18" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+                            <line x1="0" y1="0" x2="0" y2="18" stroke="var(--phosphor-cyan)" stroke-width="2" opacity="0.25" />
+                        </pattern>
+                    </defs>
+
+                    <!-- IRANIAN COASTLINE -->
+                    <path class="landmass" d="M -24,-24 L 2424,-24 L 2424,1320 L 2040,1008 L 1752,456 L 1248,372 L 768,624 L -24,312 Z" />
+                    
+                    <!-- ARABIAN PENINSULA COASTLINE -->
+                    <path class="landmass" d="M -24,1704 L 2424,1704 L 2424,1680 L 1920,1632 L 1440,1320 L 1404,720 L 1236,864 L 1008,1080 L 720,1224 L 360,1320 L -24,1344 Z" />
+                    
+                    <text class="label-country" x="600" y="150">IRAN</text>
+
+                    <!-- QESHM ISLAND -->
+                    <polygon class="island" points="950,570 1230,440 1260,500 980,640" />
+                    <text class="label-small" x="1032" y="668">QESHM</text>
+
+                    <!-- SMALLER ISLANDS -->
+                    <circle class="island" cx="1340" cy="560" r="25" />
+                    <text class="label-small" x="1370" y="570">LARAK</text>
+
+                    <circle class="island" cx="1420" cy="450" r="28" />
+                    <text class="label-small" x="1455" y="455">HORMUZ</text>
+
+                    <circle class="island" cx="850" cy="740" r="22" />
+                    <text class="label-small" x="885" y="745">GR. TUNB</text>
+
+                    <circle class="island" cx="790" cy="770" r="16" />
+
+                    <circle class="island" cx="750" cy="880" r="25" />
+                    <text class="label-small" x="650" y="885">ABU MUSA</text>
+
+                    <circle class="island" cx="580" cy="940" r="22" />
+                    <text class="label-small" x="510" y="945">SIRRI</text>
+
+                    <ellipse class="island" cx="240" cy="920" rx="50" ry="25" />
+                    <text class="label-small" x="220" y="965">KISH</text>
+                    
+                    <!-- POLITICAL BOUNDARIES -->
+                    <path class="border" d="M 1008,1080 L 1152,1320 L 1440,1320" />
+                    <path class="border" d="M 1152,1320 L 1056,1704" />
+
+                    <!-- SHIPPING CORRIDOR -->
+                    <path class="shipping-lane" d="M 120,1080 L 600,912 L 960,720 L 1272,600 L 1632,840 L 2280,1392" />
+                    <polygon fill="#00ffaa" points="2280,1392 2244,1380 2256,1392 2244,1404" />
+                    <text class="label-small" x="2016" y="1356" style="fill: #00ffaa;">TR-7 (COMMERCIAL)</text>
+
+                    <!-- STRATEGIC CITIES -->
+                    <rect class="city-marker" x="1248" y="330" width="15" height="15" />
+                    <text class="label" x="1284" y="350">BANDAR-E 'ABBAS</text>
+                    
+                    <text class="label-country" x="1260" y="1180">OMAN</text>
+
+                    <circle class="city-marker" cx="792" cy="1296" r="9" />
+                    <text class="label" x="636" y="1284">DUBAYY</text>
+
+                    <circle class="city-marker" cx="504" cy="1440" r="9" />
+                    <text class="label" x="480" y="1488">ABU DHABI</text>
+
+                    <text class="label" x="480" y="1608">UNITED ARAB EMIRATES</text>
+
+                    <rect class="city-marker" x="1890" y="1620" width="15" height="15" />
+                    <text class="label" x="1750" y="1635">MUSCAT</text>
+
+                    <!-- WATER LABELS -->
+                    <text class="label-water" x="1272" y="600">STRAIT OF HORMUZ</text>
+                    <text class="label-water" x="1800" y="1080">GULF OF OMAN</text>
+                    <text class="label-water" x="288" y="768">PERSIAN GULF</text>
+
+                    <!-- GAME LAYERS -->
+                    <g id="towers-layer"></g>
+                    <g id="projectiles-layer"></g>
+                    <g id="enemies-layer"></g>
+                </svg>
+            </div>
+        </div>
+
+        <!-- Original static overlays preserved exactly -->
+        <div class="ui-overlay top-left">
+            <div>SYS_OP: GLOBALCOM</div>
+            <div>SECTOR: HORMUZ_STRAIT</div>
+            <div>STATUS: <span class="blink" id="status-text">PREPARATION PHASE</span></div>
+        </div>
+        
+        <div class="ui-overlay top-right">
+            <div>DEFCON LEVEL: 3</div>
+            <div id="clock">00:00:00Z</div>
+        </div>
+
+        <div class="ui-overlay bottom-left">
+            <div>LAT: 26.5683 N</div>
+            <div>LON: 56.2625 E</div>
+            <div>NAV: MOUSE_DRAG / ARROWS</div>
+        </div>
+
+        <div class="ui-overlay bottom-right">
+            <div>TRACKING: ACTIVE</div>
+            <div>LINK: SECURE_ENCRYPTED</div>
+        </div>
+
+        <!-- Game status bar -->
+        <div class="status-bar" id="status-bar">
+            OIL: <span id="oil-price">$82.40</span> | FUNDS: $<span id="funds">850</span> | WAVE: <span id="wave-num">1</span> | ESCAPED: <span id="escaped">0</span>
+        </div>
+
+        <!-- NEW: Phase indicator -->
+        <div class="phase-indicator" id="phase-indicator">PREPARATION PHASE</div>
+
+        <!-- NEW: Launch wave button -->
+        <div class="start-wave-btn" id="start-wave-btn" onclick="launchWave()">LAUNCH NEXT WAVE</div>
+
+        <!-- Shop panel -->
+        <div class="shop-panel" id="shop-panel">
+            <div style="margin-bottom:12px; font-size:17px; letter-spacing:2px;">IRGC TOWER DEPOT</div>
+            
+            <div class="tower-option" data-type="0">
+                <span class="tower-name">COASTAL GUN</span><br>
+                <span style="font-size:13px;">RANGE 280 • DMG 20 • $150</span>
+            </div>
+            <div class="tower-option" data-type="1">
+                <span class="tower-name">SILKWORM MISSILE</span><br>
+                <span style="font-size:13px;">RANGE 420 • DMG 45 • $260</span>
+            </div>
+            <div class="tower-option" data-type="2">
+                <span class="tower-name">DRONE SWARM</span><br>
+                <span style="font-size:13px;">RANGE 210 • DMG 15 • $195</span>
+            </div>
+        </div>
+
+        <!-- Controls hint updated -->
+        <div class="controls-hint">DRAG TO PAN • ARROW KEYS • SELECT SHOP • CLICK IRAN/ISLANDS • LAUNCH WAVE</div>
+        <div class="scanlines"></div>
+
+        <!-- Game over -->
+        <div class="game-over" id="game-over-screen">
+            <div style="font-size:42px; margin-bottom:20px;">CRITICAL FAILURE</div>
+            <div>OIL PRICE COLLAPSED</div>
+            <div style="font-size:18px; margin:15px 0;">IRANIAN DEFENSE OVERRUN</div>
+            <button onclick="restartGame()" style="background:#000; color:var(--phosphor-cyan); border:2px solid var(--phosphor-cyan); padding:10px 30px; font-family:inherit; cursor:pointer;">REBOOT SYSTEM</button>
+        </div>
+    </div>
+
+    <script>
+        /* Original client-side logic preserved exactly */
+        function updateClock() {
+            const now = new Date();
+            const hours = String(now.getUTCHours()).padStart(2, '0');
+            const minutes = String(now.getUTCMinutes()).padStart(2, '0');
+            const seconds = String(now.getUTCSeconds()).padStart(2, '0');
+            document.getElementById('clock').innerText = `${hours}:${minutes}:${seconds}Z`;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        const viewport = document.getElementById('viewport');
+        const container = document.getElementById('container');
+        const svg = document.getElementById('map-svg');
+        const towersLayer = document.getElementById('towers-layer');
+        const enemiesLayer = document.getElementById('enemies-layer');
+        const projectilesLayer = document.getElementById('projectiles-layer');
+
+        let offsetX = 85;
+        let offsetY = -28;
+        let isDragging = false;
+        let startX, startY;
+        let mapScale = 0.78;   /* AUTOZOOM: 78% scale so full tactical map + all UI visible */
+
+        function updateTransform() {
+            viewport.style.transform = `scale(${mapScale}) translate(${offsetX}px, ${offsetY}px)`;
+        }
+
+        container.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            startX = e.clientX - (offsetX * mapScale);
+            startY = e.clientY - (offsetY * mapScale);
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            offsetX = (e.clientX - startX) / mapScale;
+            offsetY = (e.clientY - startY) / mapScale;
+            updateTransform();
+        });
+
+        window.addEventListener('mouseup', () => { isDragging = false; });
+
+        window.addEventListener('keydown', (e) => {
+            const step = 40;
+            switch(e.key) {
+                case 'ArrowUp': offsetY += step / mapScale; break;
+                case 'ArrowDown': offsetY -= step / mapScale; break;
+                case 'ArrowLeft': offsetX += step / mapScale; break;
+                case 'ArrowRight': offsetX -= step / mapScale; break;
+                default: return;
+            }
+            updateTransform();
+        });
+
+        /* ====================== FULL TOWER DEFENSE GAME LOGIC ====================== */
+        let funds = 850;
+        let oilPrice = 82.4;
+        let wave = 1;
+        let escaped = 0;
+        let gameRunning = true;
+        let selectedType = null;
+        let gamePhase = "preparation";   /* NEW: Preparation / Wave Active phases */
+
+        const pathPoints = [
+            {x: 120, y: 1080},
+            {x: 600, y: 912},
+            {x: 960, y: 720},
+            {x: 1272, y: 600},
+            {x: 1632, y: 840},
+            {x: 2280, y: 1392}
+        ];
+
+        const towerTypes = [
+            { name: "COASTAL GUN", cost: 150, range: 280, damage: 20, cooldown: 850 },
+            { name: "SILKWORM MISSILE", cost: 260, range: 420, damage: 45, cooldown: 1650 },
+            { name: "DRONE SWARM", cost: 195, range: 210, damage: 15, cooldown: 420 }
+        ];
+
+        let towers = [];
+        let enemies = [];
+
+        function updateUI() {
+            document.getElementById('oil-price').textContent = oilPrice.toFixed(2);
+            document.getElementById('funds').textContent = Math.floor(funds);
+            document.getElementById('wave-num').textContent = wave;
+            document.getElementById('escaped').textContent = escaped;
+            document.getElementById('phase-indicator').textContent = gamePhase.toUpperCase() + " PHASE";
+            document.getElementById('status-text').textContent = gamePhase.toUpperCase() + " PHASE";
+            document.getElementById('start-wave-btn').style.display = (gamePhase === "preparation" && enemies.length === 0) ? "block" : "none";
+        }
+
+        function getWorldCoordinates(clientX, clientY) {
+            const rect = container.getBoundingClientRect();
+            const localX = (clientX - rect.left - offsetX * mapScale) / mapScale;
+            const localY = (clientY - rect.top - offsetY * mapScale) / mapScale;
+            const scale = 2400 / 1500;
+            return { x: localX * scale, y: localY * scale };
+        }
+
+        function isValidPlacement(worldX, worldY) {
+            /* NEW: Only Iranian mainland + islands. Arabian coast blocked */
+            if (worldY > 1050) return false;                    /* Arabian coast */
+            if (worldX < 380 && worldY > 850) return false;     /* SW exclusion */
+            if (worldX > 1700 && worldY > 980) return false;    /* SE exclusion */
+            return true;   /* allows Qeshm, Hormuz, Larak, Kish, Iranian north */
+        }
+
+        function createTowerVisual(typeIndex, worldX, worldY) {
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            
+            /* DISTINCT ICONS - visually different for each type */
+            if (typeIndex === 0) {
+                /* Coastal Gun - long barrel */
+                const base = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                base.setAttribute("cx", worldX); base.setAttribute("cy", worldY); base.setAttribute("r", "24");
+                base.setAttribute("fill", "#112233"); base.setAttribute("stroke", "#00ffff"); base.setAttribute("stroke-width", "4");
+                const barrel = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+                barrel.setAttribute("x", worldX - 7); barrel.setAttribute("y", worldY - 32);
+                barrel.setAttribute("width", "14"); barrel.setAttribute("height", "36");
+                barrel.setAttribute("fill", "#445566"); barrel.setAttribute("stroke", "#00ffff");
+                g.appendChild(base); g.appendChild(barrel);
+            } else if (typeIndex === 1) {
+                /* Silkworm Missile - angled launcher */
+                const base = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+                base.setAttribute("x", worldX - 19); base.setAttribute("y", worldY - 16);
+                base.setAttribute("width", "38"); base.setAttribute("height", "26");
+                base.setAttribute("fill", "#223344"); base.setAttribute("stroke", "#00ffff");
+                const missile = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+                missile.setAttribute("points", `${worldX+12},${worldY-30} ${worldX+26},${worldY-12} ${worldX+8},${worldY-8}`);
+                missile.setAttribute("fill", "#ff3366"); missile.setAttribute("stroke", "#00ffff");
+                g.appendChild(base); g.appendChild(missile);
+            } else {
+                /* Drone Swarm - radar dish + rotors */
+                const dish = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                dish.setAttribute("cx", worldX); dish.setAttribute("cy", worldY - 6); dish.setAttribute("r", "23");
+                dish.setAttribute("fill", "#113322"); dish.setAttribute("stroke", "#00ffff");
+                const rotor1 = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                rotor1.setAttribute("x1", worldX-14); rotor1.setAttribute("y1", worldY-22);
+                rotor1.setAttribute("x2", worldX+14); rotor1.setAttribute("y2", worldY-22);
+                rotor1.setAttribute("stroke", "#00ff88"); rotor1.setAttribute("stroke-width", "4");
+                const rotor2 = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                rotor2.setAttribute("x1", worldX); rotor2.setAttribute("y1", worldY-30);
+                rotor2.setAttribute("x2", worldX); rotor2.setAttribute("y2", worldY-14);
+                rotor2.setAttribute("stroke", "#00ff88"); rotor2.setAttribute("stroke-width", "4");
+                g.appendChild(dish); g.appendChild(rotor1); g.appendChild(rotor2);
+            }
+            return g;
+        }
+
+        function placeTower(worldX, worldY) {
+            if (selectedType === null || funds < towerTypes[selectedType].cost || !isValidPlacement(worldX, worldY)) return false;
+            
+            const type = towerTypes[selectedType];
+            funds -= type.cost;
+            updateUI();
+
+            const towerGroup = createTowerVisual(selectedType, worldX, worldY);
+            towersLayer.appendChild(towerGroup);
+
+            towers.push({
+                element: towerGroup,
+                x: worldX,
+                y: worldY,
+                range: type.range,
+                damage: type.damage,
+                cooldown: type.cooldown,
+                lastFire: 0,
+                typeIndex: selectedType
+            });
+            return true;
+        }
+
+        function fireAt(tower, enemy) {
+            const now = Date.now();
+            if (now - tower.lastFire < tower.cooldown) return;
+
+            tower.lastFire = now;
+            enemy.health -= tower.damage;
+
+            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            line.setAttribute("x1", tower.x);
+            line.setAttribute("y1", tower.y);
+            line.setAttribute("x2", enemy.x);
+            line.setAttribute("y2", enemy.y);
+            line.setAttribute("stroke", tower.typeIndex === 1 ? "#ff00ff" : "#00ffaa");
+            line.setAttribute("stroke-width", "3");
+            line.setAttribute("opacity", "0.9");
+            projectilesLayer.appendChild(line);
+            setTimeout(() => { if (line.parentNode) projectilesLayer.removeChild(line); }, 140);
+
+            if (enemy.health <= 0) destroyEnemy(enemy);
+        }
+
+        function destroyEnemy(enemy) {
+            if (enemy.element.parentNode) enemiesLayer.removeChild(enemy.element);
+            const index = enemies.indexOf(enemy);
+            if (index > -1) enemies.splice(index, 1);
+            funds += 45;
+            updateUI();
+        }
+
+        function handleEscape(enemy) {
+            if (enemy.element.parentNode) enemiesLayer.removeChild(enemy.element);
+            const index = enemies.indexOf(enemy);
+            if (index > -1) enemies.splice(index, 1);
+            
+            escaped++;
+            oilPrice = Math.max(18, oilPrice - 2.8);
+            updateUI();
+
+            if (oilPrice < 25) gameOver();
+        }
+
+        function findTarget(tower) {
+            let closest = null;
+            let minDist = Infinity;
+            for (let enemy of enemies) {
+                const dx = enemy.x - tower.x;
+                const dy = enemy.y - tower.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                if (dist < tower.range && dist < minDist) {
+                    minDist = dist;
+                    closest = enemy;
+                }
+            }
+            return closest;
+        }
+
+        function gameLoop() {
+            if (!gameRunning) return;
+
+            if (gamePhase === "wave") {
+                /* Update enemies only in Wave Active phase */
+                for (let i = enemies.length - 1; i >= 0; i--) {
+                    const enemy = enemies[i];
+                    if (enemy.waypointIndex >= pathPoints.length) continue;
+
+                    const target = pathPoints[enemy.waypointIndex];
+                    const dx = target.x - enemy.x;
+                    const dy = target.y - enemy.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < 8) {
+                        enemy.waypointIndex++;
+                        if (enemy.waypointIndex >= pathPoints.length) {
+                            handleEscape(enemy);
+                            continue;
+                        }
+                    } else {
+                        const ux = dx / distance;
+                        const uy = dy / distance;
+                        enemy.x += ux * enemy.speed * 0.016;
+                        enemy.y += uy * enemy.speed * 0.016;
+                    }
+
+                    const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+                    enemy.element.setAttribute('transform', `translate(${enemy.x} ${enemy.y}) rotate(${angle})`);
+                }
+
+                /* Tower targeting & firing only in Wave Active */
+                for (let tower of towers) {
+                    const target = findTarget(tower);
+                    if (target) fireAt(tower, target);
+                }
+            }
+
+            updateUI();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function createTanker() {
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            const hull = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+            hull.setAttribute("x", "-35"); hull.setAttribute("y", "-12");
+            hull.setAttribute("width", "70"); hull.setAttribute("height", "24");
+            hull.setAttribute("fill", "#ff8800"); hull.setAttribute("stroke", "#00ffff");
+            hull.setAttribute("stroke-width", "3");
+            const superstruct = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+            superstruct.setAttribute("x", "-15"); superstruct.setAttribute("y", "-22");
+            superstruct.setAttribute("width", "32"); superstruct.setAttribute("height", "14");
+            superstruct.setAttribute("fill", "#cc6600"); superstruct.setAttribute("stroke", "#00ffff");
+            g.appendChild(hull); g.appendChild(superstruct);
+            enemiesLayer.appendChild(g);
+
+            const enemy = {
+                element: g,
+                x: pathPoints[0].x,
+                y: pathPoints[0].y,
+                waypointIndex: 1,
+                health: 60 + wave * 18,
+                maxHealth: 60 + wave * 18,
+                speed: 72
+            };
+            enemies.push(enemy);
+            return enemy;
+        }
+
+        function startWave() {
+            if (gamePhase !== "preparation") return;
+            gamePhase = "wave";
+            updateUI();
+            const enemyCount = 6 + wave * 3;
+            let spawned = 0;
+            const spawnInterval = setInterval(() => {
+                if (spawned < enemyCount && gameRunning) {
+                    createTanker();
+                    spawned++;
+                } else {
+                    clearInterval(spawnInterval);
+                    setTimeout(checkWaveComplete, 9500);
+                }
+            }, 650);
+        }
+
+        function launchWave() {
+            if (gamePhase === "preparation" && enemies.length === 0) {
+                startWave();
+            }
+        }
+
+        function checkWaveComplete() {
+            if (enemies.length === 0 && gameRunning) {
+                const income = Math.floor(oilPrice * 7.5 + 80);
+                funds += income;
+                wave++;
+                gamePhase = "preparation";
+                updateUI();
+            }
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            document.getElementById('game-over-screen').style.display = 'block';
+        }
+
+        function restartGame() {
+            location.reload();
+        }
+
+        /* Shop selection */
+        document.querySelectorAll('.tower-option').forEach((option, index) => {
+            option.addEventListener('click', () => {
+                document.querySelectorAll('.tower-option').forEach(o => o.classList.remove('selected'));
+                option.classList.add('selected');
+                selectedType = index;
+            });
+        });
+
+        /* Map click - placement restricted */
+        svg.addEventListener('click', (e) => {
+            if (gamePhase !== "preparation" || selectedType === null) return;
+            const worldPos = getWorldCoordinates(e.clientX, e.clientY);
+            placeTower(worldPos.x, worldPos.y);
+        });
+
+        /* Keyboard shortcut for next wave (only in prep) */
+        window.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 'n' && gamePhase === "preparation" && enemies.length === 0) {
+                startWave();
+            }
+        });
+
+        /* Initialize */
+        setTimeout(() => {
+            updateTransform();
+            updateUI();
+            gameLoop();
+            /* First preparation phase - player places towers before launching first wave */
+        }, 600);
+    </script>
+</body>
+</html>
