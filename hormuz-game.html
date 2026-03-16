@@ -3632,9 +3632,9 @@ function drawPlayerUnit(u) {
 
     // Range circles always visible for all units
     const isSelected = u === GameState.selectedPlacedUnit;
-    ctx.strokeStyle = isSelected ? 'rgba(0, 255, 255, 0.35)' : 'rgba(0, 255, 255, 0.08)';
-    ctx.lineWidth = isSelected ? 2 : 0.5;
-    ctx.setLineDash(isSelected ? [4, 4] : [6, 12]);
+    ctx.strokeStyle = isSelected ? 'rgba(0, 255, 255, 0.45)' : 'rgba(0, 255, 255, 0.18)';
+    ctx.lineWidth = isSelected ? 2 : 1;
+    ctx.setLineDash(isSelected ? [4, 4] : [8, 8]);
     ctx.beginPath();
     ctx.arc(u.x, u.y, u.range, 0, Math.PI * 2);
     ctx.stroke();
