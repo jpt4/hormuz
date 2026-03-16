@@ -1,0 +1,3614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>W.O.P.R. - STRAIT OF HORMUZ DEFENSE v2.0</title>
+    <style>
+        /* ================================================================
+           STYLING SYSTEM — Canonical from hormuz-map.html v4.9
+           Uses CSS Variables for 'Phosphor' terminal aesthetic.
+           Employs 'drop-shadow' filters to simulate CRT phosphor glow.
+           Grid and Scanline backgrounds enhance the 1980s computer aesthetic.
+           ================================================================ */
+        :root {
+            --phosphor-cyan: #00ffff;
+            --phosphor-dim: rgba(0, 255, 255, 0.25);
+            --phosphor-red: #ff3333;
+            --phosphor-green: #33ff33;
+            --phosphor-orange: #ffaa00;
+            --phosphor-yellow: #ffff33;
+            --bg-color: #010a15;
+            --glow: drop-shadow(0 0 5px var(--phosphor-cyan));
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            color: var(--phosphor-cyan);
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* Main CRT Display Frame — expanded to full viewport for gameplay */
+        .crt-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background-color: var(--bg-color);
+            border: 2px solid var(--phosphor-cyan);
+            box-shadow: 0 0 20px var(--phosphor-cyan), inset 0 0 40px rgba(0, 255, 255, 0.2);
+            overflow: hidden;
+            cursor: grab;
+        }
+
+        .crt-container:active {
+            cursor: grabbing;
+        }
+
+        /* Viewport: movable canvas for panning logic — fixed dimensions for game coordinate space */
+        .viewport {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 2400px;
+            height: 1680px;
+            will-change: transform;
+            transform-origin: 0 0;
+        }
+
+        /* Background Grid: Scaled larger than viewport to allow for extensive panning */
+        .grid {
+            position: absolute;
+            top: -2000px;
+            left: -2000px;
+            width: 6000px;
+            height: 6000px;
+            background-image:
+                linear-gradient(var(--phosphor-dim) 1px, transparent 1px),
+                linear-gradient(90deg, var(--phosphor-dim) 1px, transparent 1px);
+            background-size: 80px 80px;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        /* Map layer — exact canonical dimensions */
+        .map-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 2400px;
+            height: 1680px;
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        /* Game canvas — overlays map, receives pointer events for gameplay */
+        #game-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 2400px;
+            height: 1680px;
+            z-index: 3;
+            pointer-events: auto;
+        }
+
+        svg {
+            width: 100%;
+            height: 100%;
+            filter: var(--glow);
+            pointer-events: none;
+            display: block;
+        }
+
+        /* Landmass Styles: Uses a crosshatch pattern for fill and solid stroke for coastline */
+        .landmass {
+            fill: url(#crosshatch);
+            stroke: var(--phosphor-cyan);
+            stroke-width: 4;
+            stroke-linejoin: round;
+        }
+
+        /* Island Styles: Increased stroke on hover to facilitate selection/interaction */
+        .island {
+            fill: url(#crosshatch);
+            stroke: var(--phosphor-cyan);
+            stroke-width: 3;
+            transition: stroke-width 0.2s;
+            cursor: pointer;
+        }
+
+        .island:hover {
+            stroke-width: 6;
+        }
+
+        /* Border Styles: Dashed lines represent political boundaries */
+        .border {
+            fill: none;
+            stroke: var(--phosphor-cyan);
+            stroke-width: 2.5;
+            stroke-dasharray: 15, 15;
+        }
+
+        /* Shipping Lanes: Distinguished by Green/Emerald color and specific dash patterns */
+        .shipping-lane {
+            fill: none;
+            stroke: #00ffaa;
+            stroke-width: 4;
+            stroke-dasharray: 25, 20;
+            opacity: 0.8;
+        }
+
+        .city-marker {
+            fill: var(--bg-color);
+            stroke: var(--phosphor-cyan);
+            stroke-width: 4;
+        }
+
+        /* Typography settings for country and water labels */
+        .label {
+            fill: var(--phosphor-cyan);
+            font-size: 24px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            user-select: none;
+        }
+
+        .label-country {
+            fill: var(--phosphor-cyan);
+            font-size: 32px;
+            font-weight: 900;
+            letter-spacing: 4px;
+            user-select: none;
+        }
+
+        .label-water {
+            font-size: 28px;
+            fill: var(--phosphor-cyan);
+            font-style: italic;
+            opacity: 0.6;
+            letter-spacing: 7px;
+        }
+
+        .label-small {
+            font-size: 16px;
+            fill: var(--phosphor-cyan);
+            background: var(--bg-color);
+            pointer-events: none;
+        }
+
+        /* Overlay UI: Fixed position data readouts */
+        .ui-overlay {
+            position: absolute;
+            z-index: 10;
+            padding: 25px;
+            pointer-events: none;
+            text-shadow: 0 0 6px var(--phosphor-cyan);
+            font-size: 20px;
+        }
+
+        .top-left { top: 0; left: 0; }
+        .top-right { top: 0; right: 0; text-align: right; }
+        .bottom-left { bottom: 0; left: 0; }
+        .bottom-right { bottom: 0; right: 0; text-align: right; }
+
+        .blink { animation: blinker 1.2s steps(2, start) infinite; }
+        @keyframes blinker { to { visibility: hidden; } }
+
+        .scanlines {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(0, 0, 0, 0.1),
+                rgba(0, 0, 0, 0.1) 1px,
+                transparent 1px,
+                transparent 2px
+            );
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        /* Radar sweep effect for the terminal background */
+        .radar-sweep {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 3000px;
+            height: 6px;
+            background: linear-gradient(90deg, transparent, var(--phosphor-cyan));
+            transform-origin: left center;
+            z-index: 5;
+            opacity: 0.2;
+            animation: sweep 10s infinite linear;
+            pointer-events: none;
+        }
+
+        @keyframes sweep {
+            from { transform: translateY(-50%) rotate(0deg); }
+            to { transform: translateY(-50%) rotate(360deg); }
+        }
+
+        .controls-hint {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 255, 255, 0.1);
+            border: 1px solid var(--phosphor-cyan);
+            padding: 5px 15px;
+            font-size: 12px;
+            z-index: 10;
+            pointer-events: none;
+            opacity: 0.5;
+        }
+
+        /* ================================================================
+           GAME-SPECIFIC STYLES — additions beyond canonical map
+           ================================================================ */
+
+        /* Oil price HUD — top center */
+        .hud-center {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            text-align: center;
+            background: rgba(1, 10, 21, 0.8);
+            border: 2px solid var(--phosphor-cyan);
+            padding: 15px 40px;
+            pointer-events: none;
+        }
+
+        .oil-price {
+            font-size: 52px;
+            font-weight: bold;
+        }
+
+        /* Phase indicator — below oil price */
+        .hud-phase {
+            position: absolute;
+            top: 140px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            text-align: center;
+            font-size: 24px;
+            pointer-events: none;
+            text-shadow: 0 0 6px var(--phosphor-cyan);
+        }
+
+        /* Sidebar — unit selection and upgrades */
+        .sidebar {
+            position: absolute;
+            right: -420px;
+            top: 0;
+            width: 420px;
+            height: 100%;
+            background: rgba(1, 10, 21, 0.98);
+            border-left: 2px solid var(--phosphor-cyan);
+            z-index: 500;
+            transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            padding: 25px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            pointer-events: auto;
+            overflow-y: auto;
+        }
+
+        .sidebar.open { right: 0; }
+
+        .unit-card {
+            border: 1px solid var(--phosphor-dim);
+            padding: 12px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-size: 16px;
+        }
+
+        .unit-card:hover { background: rgba(0, 255, 255, 0.1); }
+        .unit-card.selected { border-color: var(--phosphor-cyan); background: rgba(0, 255, 255, 0.2); }
+        .unit-card.disabled { opacity: 0.3; pointer-events: none; }
+        .unit-cost { float: right; font-weight: bold; color: var(--phosphor-green); }
+
+        .sidebar-toggle {
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 45px;
+            height: 90px;
+            background: rgba(1, 10, 21, 0.95);
+            border: 2px solid var(--phosphor-cyan);
+            border-right: none;
+            z-index: 400;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            pointer-events: auto;
+            color: var(--phosphor-cyan);
+            flex-direction: column;
+            transition: 0.3s;
+        }
+
+        .sidebar-toggle.open { right: 420px; }
+        .sidebar-toggle span {
+            font-size: 10px;
+            margin-top: 5px;
+            writing-mode: vertical-lr;
+            text-orientation: upright;
+            letter-spacing: 2px;
+        }
+
+        /* Overlay screens — intro, reference, end */
+        .overlay-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(1, 10, 21, 0.99);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 40px;
+            box-sizing: border-box;
+            overflow-y: auto;
+        }
+
+        .overlay-screen.hidden { display: none !important; }
+
+        .btn {
+            background: transparent;
+            border: 2px solid var(--phosphor-cyan);
+            color: var(--phosphor-cyan);
+            padding: 15px 30px;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: bold;
+            font-size: 18px;
+            pointer-events: auto;
+            margin: 10px;
+            transition: background 0.2s, color 0.2s;
+        }
+
+        .btn:hover { background: var(--phosphor-cyan); color: var(--bg-color); }
+    </style>
+</head>
+<body>
+
+    <div class="crt-container" id="container">
+        <div class="viewport" id="viewport">
+            <div class="grid"></div>
+            <div class="radar-sweep"></div>
+
+            <div class="map-layer">
+                <!--
+                   SVG TACTICAL LAYER — CANONICAL from hormuz-map.html v4.9
+                   Coordinate system (viewBox): 2400 x 1680.
+                   X-axis: West to East
+                   Y-axis: North to South
+                   DO NOT MODIFY without explicit authorization.
+                -->
+                <svg viewBox="0 0 2400 1680" id="tactical-svg">
+                    <defs>
+                        <!-- Pattern used for 'land' fill to represent radar density -->
+                        <pattern id="crosshatch" width="18" height="18" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+                            <line x1="0" y1="0" x2="0" y2="18" stroke="var(--phosphor-cyan)" stroke-width="2" opacity="0.25" />
+                        </pattern>
+                    </defs>
+
+                    <!--
+                       IRANIAN COASTLINE:
+                       Coordinates define the northern shoreline of the Persian Gulf and Gulf of Oman.
+                       Point (1248, 372) represents the Bandar-e 'Abbas region.
+                    -->
+                    <path class="landmass" id="iran-coast" d="M -24,-24 L 2424,-24 L 2424,1320 L 2040,1008 L 1752,456 L 1248,372 L 768,624 L -24,312 Z" />
+
+                    <!--
+                       ARABIAN PENINSULA COASTLINE:
+                       Defines UAE and Oman shorelines.
+                       Point (1404, 720) represents the Musandam Peninsula tip.
+                    -->
+                    <path class="landmass" id="arabia-coast" d="M -24,1704 L 2424,1704 L 2424,1680 L 1920,1632 L 1440,1320 L 1404,720 L 1236,864 L 1008,1080 L 720,1224 L 360,1320 L -24,1344 Z" />
+
+                    <text class="label-country" x="600" y="150">IRAN</text>
+
+                    <!--
+                       QESHM ISLAND:
+                       Largest island in the strait. Polygon points define its elongated shape.
+                       Eastern tip terminates at X=1260 for alignment checks.
+                    -->
+                    <polygon class="island" id="island-qeshm" points="950,570 1230,440 1260,500 980,640" />
+                    <text class="label-small" x="1032" y="668">QESHM</text>
+
+                    <!--
+                       SMALLER ISLANDS:
+                       Positions are optimized for tactical clarity rather than 1:1 scale.
+                    -->
+
+                    <!-- Larak: Positioned east of Qeshm's longitude (X > 1260) to avoid overlap -->
+                    <circle class="island" id="island-larak" cx="1340" cy="560" r="25" />
+                    <text class="label-small" x="1370" y="570">LARAK</text>
+
+                    <!-- Hormuz: Positioned further east/north in the strait approach -->
+                    <circle class="island" id="island-hormuz" cx="1420" cy="450" r="28" />
+                    <text class="label-small" x="1455" y="455">HORMUZ</text>
+
+                    <!-- Islands toward the central Persian Gulf -->
+                    <circle class="island" id="island-gtunb" cx="850" cy="740" r="22" />
+                    <text class="label-small" x="885" y="745">GR. TUNB</text>
+
+                    <circle class="island" id="island-ltunb" cx="790" cy="770" r="16" />
+
+                    <circle class="island" id="island-abumusa" cx="750" cy="880" r="25" />
+                    <text class="label-small" x="650" y="885">ABU MUSA</text>
+
+                    <circle class="island" id="island-sirri" cx="580" cy="940" r="22" />
+                    <text class="label-small" x="510" y="945">SIRRI</text>
+
+                    <ellipse class="island" id="island-kish" cx="240" cy="920" rx="50" ry="25" />
+                    <text class="label-small" x="220" y="965">KISH</text>
+
+                    <!--
+                       POLITICAL BOUNDARIES:
+                       Dashed paths separating UAE and Oman sectors.
+                    -->
+                    <path class="border" d="M 1008,1080 L 1152,1320 L 1440,1320" />
+                    <path class="border" d="M 1152,1320 L 1056,1704" />
+
+                    <!--
+                       SHIPPING CORRIDOR:
+                       Primary lane (TR-7) for commercial tankers transit.
+                    -->
+                    <path class="shipping-lane" id="lane-tr7" d="M 120,1080 L 600,912 L 960,720 L 1272,600 L 1632,840 L 2280,1392" />
+                    <polygon fill="#00ffaa" points="2280,1392 2244,1380 2256,1392 2244,1404" />
+                    <text class="label-small" x="2016" y="1356" style="fill: #00ffaa;">TR-7 (COMMERCIAL)</text>
+
+                    <!--
+                       ADDITIONAL SHIPPING LANES (unlocked at later waves):
+                       These are hidden initially and revealed by game logic.
+                    -->
+                    <path class="shipping-lane" id="lane-north" d="M 200,900 L 500,780 L 850,620 L 1100,500 L 1350,520 L 1600,650 L 1900,900 L 2300,1300" style="display:none;" />
+                    <path class="shipping-lane" id="lane-south" d="M 100,1150 L 400,1050 L 700,980 L 1000,920 L 1300,780 L 1550,900 L 1800,1050 L 2200,1450" style="display:none;" />
+
+                    <!--
+                       STRATEGIC CITIES:
+                       Bandar-e 'Abbas marker adjusted north (Y=330) to ensure land-base positioning.
+                    -->
+                    <rect class="city-marker" x="1248" y="330" width="15" height="15" />
+                    <text class="label" x="1284" y="350">BANDAR-E 'ABBAS</text>
+
+                    <text class="label-country" x="1260" y="1180">OMAN</text>
+
+                    <circle class="city-marker" cx="792" cy="1296" r="9" />
+                    <text class="label" x="636" y="1284">DUBAYY</text>
+
+                    <circle class="city-marker" cx="504" cy="1440" r="9" />
+                    <text class="label" x="480" y="1488">ABU DHABI</text>
+
+                    <text class="label" x="480" y="1608">UNITED ARAB EMIRATES</text>
+
+                    <rect class="city-marker" x="1890" y="1620" width="15" height="15" />
+                    <text class="label" x="1750" y="1635">MUSCAT</text>
+
+                    <!-- WATER LABELS: Italicized and low-opacity for background identification -->
+                    <text class="label-water" x="1272" y="600">STRAIT OF HORMUZ</text>
+                    <text class="label-water" x="1800" y="1080">GULF OF OMAN</text>
+                    <text class="label-water" x="288" y="768">PERSIAN GULF</text>
+                </svg>
+            </div>
+
+            <!-- Game canvas: all dynamic elements rendered here -->
+            <canvas id="game-layer" width="2400" height="1680"></canvas>
+        </div>
+
+        <!-- ============================================================
+             HUD OVERLAYS — game-specific additions
+             ============================================================ -->
+
+        <!-- Oil Price — top center -->
+        <div class="hud-center" id="hud-oil">
+            <div>GLOBAL BRENT CRUDE</div>
+            <div id="ui-oil-price" class="oil-price">$85.00</div>
+            <div>BARREL / USD</div>
+        </div>
+
+        <!-- Phase indicator -->
+        <div class="hud-phase" id="hud-phase">INITIALIZING...</div>
+
+        <!-- Top-left: system info + game state -->
+        <div class="ui-overlay top-left">
+            <div>SYS_OP: GLOBALCOM</div>
+            <div>SECTOR: HORMUZ_STRAIT</div>
+            <div>STATUS: <span class="blink" id="ui-status">MONITORING_TRAFFIC</span></div>
+            <div style="margin-top: 15px; color: #00ffaa;">FUNDS: $<span id="ui-funds">800</span>M</div>
+            <div>WAVE: <span id="ui-wave">1</span> / 20</div>
+            <div>DATE: <span id="ui-date">01 MAR 2026</span></div>
+            <div style="margin-top: 10px;">F-14 CHARGES: <span id="ui-f14">0</span> / <span id="ui-f14-max">3</span></div>
+        </div>
+
+        <!-- Top-right: DEFCON + clock -->
+        <div class="ui-overlay top-right">
+            <div>DEFCON LEVEL: 2</div>
+            <div id="clock">00:00:00Z</div>
+        </div>
+
+        <!-- Bottom-left: coordinates + nav -->
+        <div class="ui-overlay bottom-left">
+            <div>LAT: 26.5683 N</div>
+            <div>LON: 56.2625 E</div>
+            <div>NAV: MOUSE_DRAG / ARROWS</div>
+        </div>
+
+        <!-- Bottom-right: tracking + link -->
+        <div class="ui-overlay bottom-right">
+            <div>TRACKING: ACTIVE</div>
+            <div>LINK: SECURE_ENCRYPTED</div>
+        </div>
+
+        <!-- Sidebar toggle button -->
+        <div class="sidebar-toggle" id="btn-sidebar">&#9664;<span>UNITS</span></div>
+
+        <!-- Sidebar: unit selection -->
+        <div class="sidebar" id="sidebar">
+            <h2 style="border-bottom: 2px solid var(--phosphor-cyan); padding-bottom: 10px; margin-top: 0; font-size: 20px;">DEFENSE GRID</h2>
+            <div style="font-size: 10px; margin-bottom: 10px; opacity: 0.7;">HOTKEYS: [1-6] SELECT | [7/F] F-14 | [S] SIDEBAR | [SPACE] PAUSE | [ESC] CANCEL</div>
+            <div id="unit-list"></div>
+        </div>
+
+        <!-- Intro screen -->
+        <div class="overlay-screen" id="screen-intro">
+            <h1 style="letter-spacing: 12px; margin-bottom: 5px; font-size: 3em;">W.O.P.R.</h1>
+            <h2 style="letter-spacing: 6px; opacity: 0.7;">STRAIT OF HORMUZ DEFENSE v2.0</h2>
+            <p style="max-width: 700px; font-size: 1.1em; margin: 20px 0;">
+                Establish Iranian coastal and naval defenses to disrupt commercial shipping
+                through the Strait of Hormuz. Drive global crude oil prices above $250/barrel
+                to achieve strategic victory. If prices fall below $60, the coalition wins.
+            </p>
+            <p style="font-size: 0.9em; opacity: 0.7; max-width: 600px;">
+                20 waves. Each wave = 1 week starting March 1, 2026.<br>
+                Place units during SETUP (18s) or DEFEND phases.<br>
+                Press [R] anytime for full reference.
+            </p>
+            <button class="btn" id="btn-start">INITIALIZE DEFENSE GRID</button>
+        </div>
+
+        <!-- End screen -->
+        <div class="overlay-screen hidden" id="screen-end">
+            <h1 id="end-title" style="font-size: 4em; letter-spacing: 8px;">SYSTEM HALTED</h1>
+            <p id="end-message" style="max-width: 800px; font-size: 1.5em; margin: 20px 0;"></p>
+            <div id="end-buttons"></div>
+        </div>
+
+        <div class="controls-hint">DRAG TO PAN &bull; SCROLL TO ZOOM &bull; ARROW KEYS TO NAVIGATE &bull; [S] UNITS &bull; [SPACE] PAUSE</div>
+        <div class="scanlines"></div>
+    </div>
+
+<script>
+/* ====================================================================
+   W.O.P.R. ENGINE v2.0 — STRAIT OF HORMUZ DEFENSE
+   Map geometry canonical from hormuz-map.html v4.9
+   ==================================================================== */
+
+/* ====================================================================
+   SECTION 1: TUNABLE CONSTANTS
+   All gameplay-affecting values are declared here for balance tuning.
+   No magic numbers elsewhere in the code.
+   ==================================================================== */
+
+// --- ECONOMY ---
+const STARTING_FUNDS = 800;
+const STARTING_OIL_PRICE = 85;
+const OIL_WIN_THRESHOLD = 250;
+const OIL_LOSE_THRESHOLD = 60;
+const WAVE_INCOME_MULTIPLIER = 12;       // funds per wave = oil_price * this
+const ESCORT_KILL_BONUS = 150;           // immediate funds on destroyer kill
+const F35_KILL_BONUS = 200;              // immediate funds on F-35 kill
+
+// Oil price deltas per tanker event
+const OIL_SMALL_DESTROY = 3;
+const OIL_SMALL_ESCAPE = -2;
+const OIL_MED_DESTROY = 6;
+const OIL_MED_ESCAPE = -4;
+const OIL_LARGE_DESTROY = 9;
+const OIL_LARGE_ESCAPE = -6;
+
+// --- WAVE STRUCTURE ---
+const SETUP_PHASE_DURATION = 18;         // seconds
+const STALEMATE_WAVE = 20;
+const TANKERS_PER_WAVE_MULT = 3;         // wave_n * this = tanker count
+const ESCORTS_PER_WAVE_DIV = 3;          // floor(wave_n / this) = escort count
+const F35_START_WAVE = 5;
+const F35_PER_WAVE_DIV = 4;              // floor((wave_n - 4) / this) per wave
+const WAVE_SPEED_SCALING = 0.08;         // +8% speed per wave (compounding)
+const WAVE_HP_SCALING = 0.10;            // +10% HP per wave (compounding)
+const SPAWN_INTERVAL_SEC = 1.5;          // seconds between enemy spawns within a wave
+
+// Unlimited mode (post-stalemate) scaling
+const UNLIMITED_TANKER_INCREMENT = 5;
+const UNLIMITED_ESCORT_INCREMENT = 1;
+const UNLIMITED_F35_EVERY_N_WAVES = 2;   // +1 F-35 every N waves in unlimited
+const UNLIMITED_SPEED_MULT = 1.05;
+const UNLIMITED_HP_MULT = 1.08;
+
+// Path unlocking
+const PATH_NORTH_UNLOCK_WAVE = 8;
+const PATH_SOUTH_UNLOCK_WAVE = 15;
+
+// --- TANKER STATS (base, before wave scaling) ---
+const TANKER_SMALL_HP = 100;
+const TANKER_SMALL_SPEED = 65;           // px/s
+const TANKER_MED_HP = 220;
+const TANKER_MED_SPEED = 50;
+const TANKER_LARGE_HP = 420;
+const TANKER_LARGE_SPEED = 40;
+
+// Tanker spawn distribution (cumulative probability thresholds)
+const TANKER_LARGE_CHANCE = 0.15;        // 15% large
+const TANKER_MED_CHANCE = 0.45;          // 30% medium (0.15-0.45)
+                                          // remaining 55% small
+
+// --- ESCORT DESTROYER STATS ---
+const DESTROYER_HP = 300;
+const DESTROYER_SPEED = 55;
+const DESTROYER_DPS = 25;
+const DESTROYER_RANGE = 600;
+const DESTROYER_COOLDOWN = 2.0;
+
+// --- F-35 STATS ---
+const F35_HP = 90;
+const F35_SPEED = 350;
+const F35_DPS = 35;
+const F35_RANGE = 500;
+const F35_COOLDOWN = 1.5;
+
+// --- CRUISE MISSILE SYSTEM ---
+const CRUISE_MISSILE_SPEED = 400;
+const CRUISE_MISSILE_DAMAGE = 1000;       // effectively one-shot if not evaded
+const CRUISE_MISSILE_BASE_RATE = 0.005;   // probability per frame-second per wave
+const CRUISE_MISSILE_SETUP_MULT = 0.25;   // reduced intensity during setup phase
+
+// Cruise missile evasion chances per unit signature
+const EVASION_HEAVY = 0.05;              // Coastal Battery
+const EVASION_MEDIUM = 0.10;             // SAM, Mine Layer
+const EVASION_LOW = 0.90;                // Drone, FAB
+// STEALTH units are immune (submarines)
+
+// Cruise missile targeting priority (index = priority, 0 = highest)
+// Matches signature types: heavy, med(SAM), low(drone), low(FAB), med(mine)
+// Actual targeting uses signature weight system (see combat logic)
+const SIGNATURE_WEIGHT_HEAVY = 100;
+const SIGNATURE_WEIGHT_MEDIUM = 60;
+const SIGNATURE_WEIGHT_LOW = 20;
+// STEALTH = 0 (untargetable)
+
+// SAM anti-missile intercept
+const SAM_INTERCEPT_CHANCE = 0.30;
+
+// --- F-14 TOMCAT SPECIAL ---
+const F14_KILLS_PER_CHARGE = 2;          // destroyer kills to earn one charge
+const F14_MAX_CHARGES = 3;
+const F14_COOLDOWN_SEC = 30;
+const F14_DAMAGE = 500;                  // devastating to destroyers
+const F14_SPEED = 600;                   // px/s sweep across map
+
+// --- PLAYER UNIT DEFINITIONS ---
+// Each unit: { name, icon, cost, hp, dps, range, cooldown, placement, signature, ... }
+
+const UNIT_DEFS = [
+    {
+        id: 0,
+        name: 'HY-2 Silkworm Battery',
+        shortName: 'SILKWORM',
+        icon: 'BATT',
+        cost: 200,
+        hp: 450,
+        dps: 50,
+        range: 750,
+        cooldown: 2.5,
+        placement: 'land',
+        signature: 'heavy',
+        evasion: EVASION_HEAVY,
+        targets: ['tanker', 'destroyer'],   // priority order
+        upgrades: [
+            { name: 'Extended Range', costMult: 1.4, rangeBoost: 0.30, dpsBoost: 0, hpBoost: 0, special: null },
+            { name: 'Dual Targeting', costMult: 1.4, rangeBoost: 0, dpsBoost: 0.25, hpBoost: 0.20, special: 'dual-target' }
+        ]
+    },
+    {
+        id: 1,
+        name: 'Misagh-2 SAM Site',
+        shortName: 'SAM',
+        icon: 'SAM',
+        cost: 120,
+        hp: 250,
+        dps: 20,
+        range: 650,
+        cooldown: 1.2,
+        placement: 'land',
+        signature: 'medium',
+        evasion: EVASION_MEDIUM,
+        targets: ['cruise_missile', 'f35', 'destroyer', 'tanker'],
+        antiMissile: true,
+        interceptChance: SAM_INTERCEPT_CHANCE,
+        upgrades: [
+            { name: 'Anti-Ship Module', costMult: 1.4, rangeBoost: 0.15, dpsBoost: 0.20, hpBoost: 0, special: 'anti-ship' },
+            { name: 'Dual Target + Splash', costMult: 1.4, rangeBoost: 0, dpsBoost: 0.30, hpBoost: 0.15, special: 'splash' }
+        ]
+    },
+    {
+        id: 2,
+        name: 'Shahed Drone Swarm',
+        shortName: 'DRONE',
+        icon: 'DRN',
+        cost: 60,
+        hp: 80,
+        dps: 120,
+        range: 900,
+        cooldown: 4.0,
+        placement: 'land',
+        signature: 'low',
+        evasion: EVASION_LOW,
+        targets: ['tanker', 'destroyer'],   // never air
+        attritable: true,
+        maxStrikes: 5,
+        splashRadius: 40,
+        upgrades: [
+            { name: 'Extended Swarm', costMult: 1.4, rangeBoost: 0, dpsBoost: 0.15, hpBoost: 0, special: 'strikes-7' },
+            { name: 'Heavy Swarm', costMult: 1.4, rangeBoost: 0.10, dpsBoost: 0.25, hpBoost: 0, special: 'strikes-10' }
+        ]
+    },
+    {
+        id: 3,
+        name: 'Mine Layer System',
+        shortName: 'MINE',
+        icon: 'MNL',
+        cost: 100,
+        hp: 280,
+        dps: 300,        // mine damage on detonation
+        range: 550,      // mine placement radius
+        cooldown: 10.0,  // time between mine placements
+        placement: 'coast',
+        signature: 'medium',
+        evasion: EVASION_MEDIUM,
+        targets: ['tanker', 'destroyer'],
+        maxMines: 4,
+        mineSplashRadius: 50,
+        mineRespawnTime: 12,
+        upgrades: [
+            { name: 'Heavy Mines', costMult: 1.4, rangeBoost: 0, dpsBoost: 0.60, hpBoost: 0, special: 'fast-respawn' },
+            { name: 'Dense Field', costMult: 1.4, rangeBoost: 0.15, dpsBoost: 0, hpBoost: 0, special: 'mines-6' }
+        ]
+    },
+    {
+        id: 4,
+        name: 'Zolfaghar FAB',
+        shortName: 'FAB',
+        icon: 'FAB',
+        cost: 75,
+        hp: 100,
+        dps: 20,
+        range: 350,
+        cooldown: 1.0,
+        placement: 'water',
+        signature: 'low',
+        evasion: EVASION_LOW,
+        targets: ['tanker', 'destroyer'],
+        patrolRadius: 200,
+        patrolSpeed: 120,
+        upgrades: [
+            { name: 'Fast Attack', costMult: 1.4, rangeBoost: 0.15, dpsBoost: 0.30, hpBoost: 0, special: 'speed-boost' },
+            { name: 'Torpedo Kit', costMult: 1.4, rangeBoost: 0, dpsBoost: 0.50, hpBoost: 0.20, special: 'torpedo-burst' }
+        ]
+    },
+    {
+        id: 5,
+        name: 'Ghadir Submarine',
+        shortName: 'SUB',
+        icon: 'SUB',
+        cost: 250,
+        hp: 200,
+        dps: 65,
+        range: 500,
+        cooldown: 2.2,
+        placement: 'water',
+        signature: 'stealth',
+        evasion: 1.0,    // immune to cruise missiles
+        targets: ['destroyer', 'tanker'],   // priority: escorts first
+        upgrades: [
+            { name: 'Advanced Torpedoes', costMult: 1.4, rangeBoost: 0.20, dpsBoost: 0.25, hpBoost: 0, special: null },
+            { name: 'Dual Salvo', costMult: 1.4, rangeBoost: 0, dpsBoost: 0.40, hpBoost: 0.15, special: 'dual-torpedo' }
+        ]
+    }
+];
+
+// Upgrade cost multiplier (each tier multiplies previous cost by this)
+const UPGRADE_COST_MULTIPLIER = 1.4;
+
+// --- FAB PATROL ---
+const FAB_PATROL_RADIUS = 200;
+const FAB_PATROL_SPEED = 120;
+
+// --- AUDIO ---
+const MASTER_VOLUME = 0.4;
+
+// --- DATE ---
+const START_DATE = new Date(2026, 2, 1);  // March 1, 2026 (month is 0-indexed)
+
+
+/* ====================================================================
+   SECTION 2: GAME STATE
+   ==================================================================== */
+
+const GameState = {
+    phase: 'intro',        // intro | setup | defend | waveEnd | paused | victory | defeat | stalemate
+    previousPhase: null,   // for pause/unpause
+    oil: STARTING_OIL_PRICE,
+    funds: STARTING_FUNDS,
+    wave: 1,
+    setupTimer: 0,
+    waveEndTimer: 0,
+    lastTick: 0,
+    totalTime: 0,
+
+    // F-14 special
+    f14Charges: 0,
+    f14KillCounter: 0,     // kills toward next charge
+    f14Cooldown: 0,
+    f14Active: null,       // active F-14 sweep entity
+
+    // Unlimited mode
+    passedStalemate: false,
+
+    // UI state
+    selectedUnitType: -1,  // index into UNIT_DEFS, -1 = none
+    selectedPlacedUnit: null,
+    sidebarOpen: false,
+
+    // Spawn queue
+    spawnQueue: [],
+    spawnTimer: 0,
+
+    // Paths unlocked
+    activePaths: ['lane-tr7'],
+};
+
+
+/* ====================================================================
+   SECTION 3: ENTITY STORAGE
+   ==================================================================== */
+
+const Entities = {
+    playerUnits: [],       // placed defensive units
+    enemies: [],           // tankers, destroyers, F-35s
+    projectiles: [],       // player projectiles
+    enemyProjectiles: [],  // destroyer/F-35 projectiles
+    cruiseMissiles: [],    // incoming cruise missiles
+    mines: [],             // active mines on the water
+    effects: [],           // visual effects (explosions, etc.)
+};
+
+
+/* ====================================================================
+   SECTION 4: DOM REFERENCES
+   ==================================================================== */
+
+const canvas = document.getElementById('game-layer');
+const ctx = canvas.getContext('2d');
+const viewport = document.getElementById('viewport');
+const container = document.getElementById('container');
+const svgEl = document.getElementById('tactical-svg');
+
+// Shipping lane path elements (for getPointAtLength)
+const lanePaths = {
+    'lane-tr7': document.getElementById('lane-tr7'),
+    'lane-north': document.getElementById('lane-north'),
+    'lane-south': document.getElementById('lane-south'),
+};
+
+// Landmass elements for hit-testing
+const iranCoast = document.getElementById('iran-coast');
+const arabiaCoast = document.getElementById('arabia-coast');
+
+// Island elements for hit-testing
+const islandElements = [
+    document.getElementById('island-qeshm'),
+    document.getElementById('island-larak'),
+    document.getElementById('island-hormuz'),
+    document.getElementById('island-gtunb'),
+    document.getElementById('island-ltunb'),
+    document.getElementById('island-abumusa'),
+    document.getElementById('island-sirri'),
+    document.getElementById('island-kish'),
+];
+
+// HUD elements
+const uiOilPrice = document.getElementById('ui-oil-price');
+const uiFunds = document.getElementById('ui-funds');
+const uiWave = document.getElementById('ui-wave');
+const uiDate = document.getElementById('ui-date');
+const uiF14 = document.getElementById('ui-f14');
+const uiF14Max = document.getElementById('ui-f14-max');
+const uiStatus = document.getElementById('ui-status');
+const hudPhase = document.getElementById('hud-phase');
+const clockEl = document.getElementById('clock');
+
+
+/* ====================================================================
+   SECTION 5: VIEWPORT / PAN / ZOOM
+   ==================================================================== */
+
+let panX = -200, panY = -100, zoom = 0.55;
+let isPanning = false, panStartX, panStartY;
+
+function updateViewportTransform() {
+    viewport.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+}
+
+// Mouse wheel zoom (focal point under cursor)
+container.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const factor = e.deltaY > 0 ? 0.9 : 1.1;
+    const newZoom = Math.min(Math.max(zoom * factor, 0.2), 2.0);
+    const mouseX = e.clientX;
+    const mouseY = e.clientY;
+    panX = mouseX - (mouseX - panX) * (newZoom / zoom);
+    panY = mouseY - (mouseY - panY) * (newZoom / zoom);
+    zoom = newZoom;
+    updateViewportTransform();
+}, { passive: false });
+
+// Mouse drag panning
+container.addEventListener('mousedown', (e) => {
+    // Don't pan if clicking on UI elements
+    if (e.target.closest('.sidebar') || e.target.closest('.btn') ||
+        e.target.closest('.sidebar-toggle') || e.target.closest('.overlay-screen')) {
+        return;
+    }
+    // If placing a unit, handle that instead of panning
+    if (GameState.selectedUnitType !== -1) {
+        handlePlacement(e);
+        return;
+    }
+    isPanning = true;
+    panStartX = e.clientX - panX;
+    panStartY = e.clientY - panY;
+});
+
+window.addEventListener('mousemove', (e) => {
+    if (!isPanning) return;
+    panX = e.clientX - panStartX;
+    panY = e.clientY - panStartY;
+    updateViewportTransform();
+});
+
+window.addEventListener('mouseup', () => {
+    isPanning = false;
+});
+
+// Right-click to cancel placement
+container.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    if (GameState.selectedUnitType !== -1) {
+        GameState.selectedUnitType = -1;
+        updateUI();
+    }
+});
+
+
+/* ====================================================================
+   SECTION 6: COORDINATE HELPERS
+   ==================================================================== */
+
+/** Convert screen (client) coordinates to game-world (SVG) coordinates */
+function screenToWorld(clientX, clientY) {
+    const rect = container.getBoundingClientRect();
+    return {
+        x: (clientX - rect.left - panX) / zoom,
+        y: (clientY - rect.top - panY) / zoom
+    };
+}
+
+/** Check if a point is inside the Iranian landmass (mainland) */
+function isPointInIran(x, y) {
+    const pt = svgEl.createSVGPoint();
+    pt.x = x;
+    pt.y = y;
+    return iranCoast.isPointInFill(pt);
+}
+
+/** Check if a point is inside the Arabian landmass (UAE/Oman) */
+function isPointInArabia(x, y) {
+    const pt = svgEl.createSVGPoint();
+    pt.x = x;
+    pt.y = y;
+    return arabiaCoast.isPointInFill(pt);
+}
+
+/** Check if a point is on any Iranian-controlled island */
+function isPointOnIsland(x, y) {
+    const pt = svgEl.createSVGPoint();
+    pt.x = x;
+    pt.y = y;
+    for (const island of islandElements) {
+        if (island.isPointInFill(pt)) return true;
+    }
+    return false;
+}
+
+/** Check if a point is on any land (Iranian or Arabian) */
+function isPointOnLand(x, y) {
+    return isPointInIran(x, y) || isPointInArabia(x, y) || isPointOnIsland(x, y);
+}
+
+/** Check if a point is in water (not on any land) */
+function isPointInWater(x, y) {
+    return !isPointOnLand(x, y);
+}
+
+/** Check if a point is valid for Iranian land placement (mainland or islands, NOT Arabia) */
+function isValidLandPlacement(x, y) {
+    return isPointInIran(x, y) || isPointOnIsland(x, y);
+}
+
+/**
+ * Check if a point is valid for coast placement (mine layers).
+ * Must be on Iranian land but near water — within a margin of the coastline.
+ */
+function isValidCoastPlacement(x, y) {
+    if (!isValidLandPlacement(x, y)) return false;
+    // Check if water is nearby (within ~60px in any cardinal direction)
+    const margin = 60;
+    return isPointInWater(x + margin, y) || isPointInWater(x - margin, y) ||
+           isPointInWater(x, y + margin) || isPointInWater(x, y - margin);
+}
+
+/** Check if a point is valid for water placement (FABs, subs) */
+function isValidWaterPlacement(x, y) {
+    return isPointInWater(x, y);
+}
+
+/**
+ * Validate placement for a given unit definition at world coordinates.
+ * Returns { valid: boolean, reason: string }
+ */
+function validatePlacement(unitDef, x, y) {
+    // Bounds check
+    if (x < 0 || x > 2400 || y < 0 || y > 1680) {
+        return { valid: false, reason: 'OUT OF BOUNDS' };
+    }
+
+    switch (unitDef.placement) {
+        case 'land':
+            if (!isValidLandPlacement(x, y)) {
+                return { valid: false, reason: 'MUST PLACE ON IRANIAN TERRITORY' };
+            }
+            return { valid: true, reason: '' };
+
+        case 'water':
+            if (!isValidWaterPlacement(x, y)) {
+                return { valid: false, reason: 'MUST PLACE IN WATER' };
+            }
+            return { valid: true, reason: '' };
+
+        case 'coast':
+            if (!isValidCoastPlacement(x, y)) {
+                return { valid: false, reason: 'MUST PLACE ON IRANIAN COAST' };
+            }
+            return { valid: true, reason: '' };
+
+        default:
+            return { valid: false, reason: 'UNKNOWN PLACEMENT TYPE' };
+    }
+}
+
+
+/* ====================================================================
+   SECTION 7: DATE FORMATTING
+   ==================================================================== */
+
+function getWaveDate(waveNumber) {
+    const date = new Date(START_DATE);
+    date.setDate(date.getDate() + (waveNumber - 1) * 7);
+    const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${day} ${months[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+
+/* ====================================================================
+   SECTION 8: UI UPDATE
+   ==================================================================== */
+
+function updateUI() {
+    // Oil price — color shifts based on value
+    const oilColor = GameState.oil >= 150 ? '#33ff33' :
+                     GameState.oil >= 100 ? '#00ffff' :
+                     GameState.oil >= 75  ? '#ffaa00' : '#ff3333';
+    uiOilPrice.innerText = `$${GameState.oil.toFixed(2)}`;
+    uiOilPrice.style.color = oilColor;
+    uiOilPrice.style.textShadow = `0 0 10px ${oilColor}`;
+
+    // Funds, wave, date
+    uiFunds.innerText = Math.round(GameState.funds);
+    uiWave.innerText = `${GameState.wave} / ${GameState.passedStalemate ? '∞' : STALEMATE_WAVE}`;
+    uiDate.innerText = getWaveDate(GameState.wave);
+
+    // F-14
+    uiF14.innerText = GameState.f14Charges;
+    uiF14Max.innerText = F14_MAX_CHARGES;
+
+    // Phase
+    switch (GameState.phase) {
+        case 'setup':
+            hudPhase.innerText = `SETUP PHASE — ${Math.ceil(GameState.setupTimer)}s`;
+            uiStatus.innerText = 'DEPLOYING_ASSETS';
+            break;
+        case 'defend':
+            hudPhase.innerText = `DEFEND — WAVE ${GameState.wave}`;
+            uiStatus.innerText = 'ENGAGED';
+            break;
+        case 'waveEnd':
+            hudPhase.innerText = 'WAVE COMPLETE';
+            uiStatus.innerText = 'ASSESSING';
+            break;
+        case 'paused':
+            hudPhase.innerText = 'SYSTEM PAUSED';
+            break;
+        case 'victory':
+        case 'defeat':
+        case 'stalemate':
+            hudPhase.innerText = '';
+            break;
+        default:
+            hudPhase.innerText = 'INITIALIZING...';
+    }
+
+    // Sidebar unit cards
+    updateSidebarUnits();
+}
+
+function updateSidebarUnits() {
+    let html = '';
+
+    // Show upgrade panel if a placed unit is selected
+    if (GameState.selectedPlacedUnit) {
+        const u = GameState.selectedPlacedUnit;
+        const def = UNIT_DEFS[u.defId];
+        const upgCost = getUpgradeCost(u);
+        const upgName = getUpgradeName(u);
+        const canUpgrade = upgCost !== Infinity && GameState.funds >= upgCost;
+
+        html += `<div class="unit-card selected" style="border-color: #ffff33;">
+            <strong>${def.shortName} [TIER ${u.tier}]</strong><br>
+            <small>HP: ${u.hp}/${u.hpMax} | DPS: ${u.dps} | RNG: ${u.range}</small><br>`;
+        if (upgCost !== Infinity) {
+            html += `<small>NEXT: ${upgName} — $${upgCost}M</small><br>
+                <button class="btn" style="margin-top:8px; padding:8px; font-size:14px; width:100%; ${canUpgrade ? '' : 'opacity:0.3; pointer-events:none;'}"
+                    onclick="upgradeUnit(GameState.selectedPlacedUnit); updateUI();">[U] UPGRADE</button>`;
+        } else {
+            html += `<small style="color:#ffff33;">MAX TIER REACHED</small>`;
+        }
+        html += `</div><hr style="border-color: var(--phosphor-dim); margin: 15px 0;">`;
+    }
+
+    // Unit buy list
+    UNIT_DEFS.forEach((def, i) => {
+        const canAfford = GameState.funds >= def.cost;
+        const selected = GameState.selectedUnitType === i;
+        html += `<div class="unit-card ${canAfford ? '' : 'disabled'} ${selected ? 'selected' : ''}"
+                      onclick="selectUnitType(${i})" data-unit-idx="${i}">
+            <span class="unit-cost">$${def.cost}M</span>
+            <strong>[${i + 1}] ${def.shortName}</strong><br>
+            <small>HP:${def.hp} DPS:${def.dps} RNG:${def.range} ${def.signature.toUpperCase()}</small>
+        </div>`;
+    });
+
+    // F-14 button
+    const f14Ready = GameState.f14Charges > 0 && GameState.f14Cooldown <= 0;
+    html += `<div class="unit-card ${f14Ready ? '' : 'disabled'}" onclick="activateF14()"
+                 style="border-color: #ffffff; ${f14Ready ? '' : 'opacity:0.3;'}">
+        <strong>[7/F] F-14 TOMCAT STRIKE</strong><br>
+        <small>CHARGES: ${GameState.f14Charges}/${F14_MAX_CHARGES} | CD: ${Math.ceil(GameState.f14Cooldown)}s</small>
+    </div>`;
+
+    document.getElementById('unit-list').innerHTML = html;
+}
+
+
+/* ====================================================================
+   SECTION 9: UNIT SELECTION & PLACEMENT
+   ==================================================================== */
+
+function selectUnitType(idx) {
+    if (idx < 0 || idx >= UNIT_DEFS.length) return;
+    if (GameState.funds < UNIT_DEFS[idx].cost) return;
+    GameState.selectedUnitType = idx;
+    updateUI();
+}
+
+function cancelSelection() {
+    GameState.selectedUnitType = -1;
+    GameState.selectedPlacedUnit = null;
+    updateUI();
+}
+
+function cycleSelectedUnit() {
+    if (Entities.playerUnits.length === 0) return;
+    const currentIdx = GameState.selectedPlacedUnit
+        ? Entities.playerUnits.indexOf(GameState.selectedPlacedUnit)
+        : -1;
+    const nextIdx = (currentIdx + 1) % Entities.playerUnits.length;
+    GameState.selectedPlacedUnit = Entities.playerUnits[nextIdx];
+    GameState.selectedUnitType = -1;
+    updateUI();
+}
+
+function handlePlacement(e) {
+    const world = screenToWorld(e.clientX, e.clientY);
+
+    // Check if clicking an existing player unit (for selection/upgrade)
+    const clickedUnit = Entities.playerUnits.find(u =>
+        u.hp > 0 && Math.hypot(u.x - world.x, u.y - world.y) < 30
+    );
+
+    if (clickedUnit && GameState.selectedUnitType === -1) {
+        // Select the placed unit for potential upgrade
+        GameState.selectedPlacedUnit = clickedUnit;
+        GameState.selectedUnitType = -1;
+        updateUI();
+        return;
+    }
+
+    if (GameState.selectedUnitType === -1) return;
+
+    const def = UNIT_DEFS[GameState.selectedUnitType];
+    const check = validatePlacement(def, world.x, world.y);
+
+    if (!check.valid) {
+        console.warn(`Placement denied: ${check.reason}`);
+        return;
+    }
+
+    // Deduct funds and create the unit
+    GameState.funds -= def.cost;
+    const unit = createPlayerUnit(def, world.x, world.y);
+    Entities.playerUnits.push(unit);
+    SFX.unitPlaced();
+
+    GameState.selectedUnitType = -1;
+    updateUI();
+}
+
+/**
+ * Upgrade a placed unit to the next tier.
+ * Returns true if upgrade was applied, false if not possible.
+ */
+function upgradeUnit(unit) {
+    if (!unit || unit.hp <= 0) return false;
+
+    const def = UNIT_DEFS[unit.defId];
+    if (unit.tier >= def.upgrades.length) return false; // max tier
+
+    const upgrade = def.upgrades[unit.tier];
+    const cost = Math.round(def.cost * Math.pow(UPGRADE_COST_MULTIPLIER, unit.tier + 1));
+
+    if (GameState.funds < cost) return false;
+
+    // Apply upgrade
+    GameState.funds -= cost;
+    unit.tier++;
+
+    // Stat boosts
+    if (upgrade.rangeBoost) unit.range = Math.round(unit.range * (1 + upgrade.rangeBoost));
+    if (upgrade.dpsBoost) unit.dps = Math.round(unit.dps * (1 + upgrade.dpsBoost));
+    if (upgrade.hpBoost) {
+        const newMax = Math.round(unit.hpMax * (1 + upgrade.hpBoost));
+        unit.hp += (newMax - unit.hpMax); // heal the difference
+        unit.hpMax = newMax;
+    }
+
+    // Special abilities
+    if (upgrade.special) {
+        switch (upgrade.special) {
+            case 'dual-target':
+                unit.cooldown *= 0.7; // faster reload simulates dual-targeting
+                break;
+            case 'anti-ship':
+                if (!unit.targets.includes('tanker')) unit.targets.push('tanker');
+                break;
+            case 'splash':
+                unit.splashRadius = 60;
+                break;
+            case 'strikes-7':
+                unit.strikesRemaining = Math.max(unit.strikesRemaining, 7);
+                break;
+            case 'strikes-10':
+                unit.strikesRemaining = Math.max(unit.strikesRemaining, 10);
+                break;
+            case 'fast-respawn':
+                // Reduce mine respawn time (handled via mine layer's cooldown)
+                unit.cooldown *= 0.6;
+                break;
+            case 'mines-6':
+                unit.maxMines = 6;
+                break;
+            case 'speed-boost':
+                unit.patrolSpeed *= 1.5;
+                break;
+            case 'torpedo-burst':
+                unit.dps = Math.round(unit.dps * 1.3); // extra on top of dpsBoost
+                break;
+            case 'dual-torpedo':
+                unit.cooldown *= 0.65;
+                break;
+        }
+    }
+
+    spawnEffect(unit.x, unit.y, '#ffff33', 25, 0.5);
+    updateUI();
+    return true;
+}
+
+function getUpgradeCost(unit) {
+    if (!unit) return 0;
+    const def = UNIT_DEFS[unit.defId];
+    if (unit.tier >= def.upgrades.length) return Infinity;
+    return Math.round(def.cost * Math.pow(UPGRADE_COST_MULTIPLIER, unit.tier + 1));
+}
+
+function getUpgradeName(unit) {
+    if (!unit) return '';
+    const def = UNIT_DEFS[unit.defId];
+    if (unit.tier >= def.upgrades.length) return 'MAX TIER';
+    return def.upgrades[unit.tier].name;
+}
+
+function createPlayerUnit(def, x, y) {
+    return {
+        defId: def.id,
+        x: x,
+        y: y,
+        hp: def.hp,
+        hpMax: def.hp,
+        dps: def.dps,
+        range: def.range,
+        cooldown: def.cooldown,
+        cooldownTimer: 0,
+        placement: def.placement,
+        signature: def.signature,
+        evasion: def.evasion,
+        targets: [...def.targets],
+        tier: 0,           // 0 = base, 1 = tier 1, 2 = tier 2
+
+        // Drone-specific
+        attritable: def.attritable || false,
+        strikesRemaining: def.maxStrikes || 0,
+        splashRadius: def.splashRadius || 0,
+
+        // Mine layer-specific
+        maxMines: def.maxMines || 0,
+        activeMines: 0,
+
+        // FAB-specific
+        patrolRadius: def.patrolRadius || 0,
+        patrolSpeed: def.patrolSpeed || 0,
+        patrolAngle: Math.random() * Math.PI * 2,
+        originX: x,
+        originY: y,
+
+        // SAM-specific
+        antiMissile: def.antiMissile || false,
+        interceptChance: def.interceptChance || 0,
+    };
+}
+
+
+/* ====================================================================
+   SECTION 10: SIDEBAR TOGGLE
+   ==================================================================== */
+
+function toggleSidebar() {
+    GameState.sidebarOpen = !GameState.sidebarOpen;
+    document.getElementById('sidebar').classList.toggle('open', GameState.sidebarOpen);
+    document.getElementById('btn-sidebar').classList.toggle('open', GameState.sidebarOpen);
+}
+
+
+/* ====================================================================
+   SECTION 11: KEYBOARD INPUT
+   ==================================================================== */
+
+window.addEventListener('keydown', (e) => {
+    const key = e.key.toLowerCase();
+
+    // Don't process game keys during intro
+    if (GameState.phase === 'intro') return;
+
+    // Arrow keys for panning
+    const panStep = 40;
+    switch (e.key) {
+        case 'ArrowUp':    panY += panStep; updateViewportTransform(); e.preventDefault(); return;
+        case 'ArrowDown':  panY -= panStep; updateViewportTransform(); e.preventDefault(); return;
+        case 'ArrowLeft':  panX += panStep; updateViewportTransform(); e.preventDefault(); return;
+        case 'ArrowRight': panX -= panStep; updateViewportTransform(); e.preventDefault(); return;
+    }
+
+    // Unit selection hotkeys 1-6
+    if (key >= '1' && key <= '6') {
+        selectUnitType(parseInt(key) - 1);
+        return;
+    }
+
+    // F-14 strike (7 or F key)
+    if (key === '7' || key === 'f') {
+        activateF14();
+        return;
+    }
+
+    switch (key) {
+        case 's':
+            toggleSidebar();
+            break;
+        case 'escape':
+            cancelSelection();
+            break;
+        case ' ':
+            e.preventDefault();
+            togglePause();
+            break;
+        case 'u':
+            if (GameState.selectedPlacedUnit) {
+                upgradeUnit(GameState.selectedPlacedUnit);
+            }
+            break;
+        case 'tab':
+            e.preventDefault();
+            cycleSelectedUnit();
+            break;
+        case 'r':
+        case '?':
+            // TODO: toggle reference overlay
+            break;
+    }
+});
+
+
+/* ====================================================================
+   SECTION 12: PAUSE
+   ==================================================================== */
+
+function togglePause() {
+    if (GameState.phase === 'paused') {
+        GameState.phase = GameState.previousPhase;
+        GameState.previousPhase = null;
+    } else if (GameState.phase === 'setup' || GameState.phase === 'defend') {
+        GameState.previousPhase = GameState.phase;
+        GameState.phase = 'paused';
+    }
+    updateUI();
+}
+
+
+/* ====================================================================
+   SECTION 13: F-14 STRIKE (stub — logic in later steps)
+   ==================================================================== */
+
+function activateF14() {
+    if (GameState.f14Charges <= 0 || GameState.f14Cooldown > 0) return;
+    if (GameState.phase !== 'setup' && GameState.phase !== 'defend') return;
+
+    GameState.f14Charges--;
+    GameState.f14Cooldown = F14_COOLDOWN_SEC;
+    SFX.f14Flyby();
+
+    // Create F-14 sweep entity — flies across the map hitting naval targets
+    const f14 = {
+        x: -100,
+        y: 400 + Math.random() * 800,
+        speed: F14_SPEED,
+        missilesRemaining: 6,
+        missileCooldown: 0,
+        active: true,
+    };
+    GameState.f14Active = f14;
+    updateUI();
+}
+
+function updateF14Strike(dt) {
+    const f14 = GameState.f14Active;
+    if (!f14 || !f14.active) return;
+
+    f14.x += f14.speed * dt;
+    f14.missileCooldown -= dt;
+
+    // Fire missiles at highest-value naval targets (destroyers first, then large tankers)
+    if (f14.missilesRemaining > 0 && f14.missileCooldown <= 0) {
+        // Find best target — prioritize destroyers
+        let target = null;
+        const destroyers = Entities.enemies.filter(e => e.alive && e.type === 'destroyer');
+        if (destroyers.length > 0) {
+            target = destroyers.reduce((c, e) =>
+                Math.hypot(e.x - f14.x, e.y - f14.y) < Math.hypot(c.x - f14.x, c.y - f14.y) ? e : c
+            );
+        } else {
+            // Target largest tankers
+            const tankers = Entities.enemies.filter(e => e.alive && e.type.startsWith('tanker'));
+            if (tankers.length > 0) {
+                // Sort by size (large > med > small), then by distance
+                tankers.sort((a, b) => {
+                    const sizeA = a.type === 'tanker-large' ? 3 : a.type === 'tanker-med' ? 2 : 1;
+                    const sizeB = b.type === 'tanker-large' ? 3 : b.type === 'tanker-med' ? 2 : 1;
+                    if (sizeB !== sizeA) return sizeB - sizeA;
+                    return Math.hypot(a.x - f14.x, a.y - f14.y) - Math.hypot(b.x - f14.x, b.y - f14.y);
+                });
+                target = tankers[0];
+            }
+        }
+
+        if (target && Math.hypot(target.x - f14.x, target.y - f14.y) < 800) {
+            // Fire missile
+            target.hp -= F14_DAMAGE;
+            spawnEffect(target.x, target.y, '#ffffff', 40, 0.8);
+            if (target.hp <= 0) {
+                target.alive = false;
+                handleEnemyKill(target);
+                spawnEffect(target.x, target.y, '#ffff00', 50, 1.0);
+            }
+            f14.missilesRemaining--;
+            f14.missileCooldown = 0.3;
+        }
+    }
+
+    // Off screen? Done
+    if (f14.x > 2600) {
+        f14.active = false;
+        GameState.f14Active = null;
+    }
+}
+
+function drawF14Strike() {
+    const f14 = GameState.f14Active;
+    if (!f14 || !f14.active) return;
+
+    ctx.save();
+    ctx.shadowColor = '#ffffff';
+    ctx.shadowBlur = 20;
+    ctx.strokeStyle = '#ffffff';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 3;
+
+    // Swept-wing F-14 silhouette (larger than enemy F-35)
+    const x = f14.x, y = f14.y;
+    ctx.beginPath();
+    ctx.moveTo(x + 30, y);           // nose
+    ctx.lineTo(x - 10, y - 25);      // left wing tip
+    ctx.lineTo(x - 15, y - 8);       // wing root
+    ctx.lineTo(x - 28, y - 12);      // tail
+    ctx.lineTo(x - 22, y);           // center
+    ctx.lineTo(x - 28, y + 12);      // tail bottom
+    ctx.lineTo(x - 15, y + 8);       // wing root
+    ctx.lineTo(x - 10, y + 25);      // right wing
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Exhaust trail
+    ctx.strokeStyle = 'rgba(255, 200, 50, 0.4)';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(x - 28, y);
+    ctx.lineTo(x - 80, y + (Math.random() - 0.5) * 8);
+    ctx.stroke();
+
+    // Label
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '10px "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('F-14 TOMCAT', x, y - 30);
+
+    ctx.restore();
+}
+
+
+/* ====================================================================
+   SECTION 13a: AUDIO SYSTEM (Web Audio API — procedural, no files)
+   ==================================================================== */
+
+let audioCtx = null;
+
+function initAudio() {
+    if (audioCtx) return;
+    try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (e) {
+        console.warn('Web Audio API not available');
+    }
+}
+
+// Ensure audio context is initialized on first user interaction
+document.addEventListener('click', initAudio, { once: true });
+document.addEventListener('keydown', initAudio, { once: true });
+
+function playTone(freq, duration, type, volume) {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    gain.gain.setValueAtTime((volume || 1) * MASTER_VOLUME, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+}
+
+function playNoise(duration, volume) {
+    if (!audioCtx) return;
+    const bufferSize = audioCtx.sampleRate * duration;
+    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+    const source = audioCtx.createBufferSource();
+    source.buffer = buffer;
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime((volume || 1) * MASTER_VOLUME, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+    source.connect(gain);
+    gain.connect(audioCtx.destination);
+    source.start();
+}
+
+const SFX = {
+    missileLaunch() {
+        // Rising sine whoosh 400→1200 Hz
+        if (!audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.3);
+        gain.gain.setValueAtTime(0.3 * MASTER_VOLUME, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.35);
+    },
+
+    mineDetonate() {
+        // Deep sonar ping + reverb
+        playTone(80, 0.6, 'sine', 0.5);
+        setTimeout(() => playTone(60, 0.8, 'sine', 0.2), 100);
+    },
+
+    droneAttack() {
+        playTone(150, 0.2, 'square', 0.15);
+    },
+
+    f14Flyby() {
+        // Jet roar — sawtooth sweep
+        if (!audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(100, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.5);
+        osc.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 1.5);
+        gain.gain.setValueAtTime(0.4 * MASTER_VOLUME, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.5 * MASTER_VOLUME, audioCtx.currentTime + 0.5);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.8);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 1.8);
+    },
+
+    torpedoLaunch() {
+        playTone(60, 0.3, 'sine', 0.3);
+        playNoise(0.2, 0.15);
+    },
+
+    shipExplosion() {
+        playNoise(0.5, 0.4);
+        playTone(50, 0.4, 'sine', 0.3);
+    },
+
+    oilUp() {
+        playTone(600, 0.1, 'sine', 0.2);
+        setTimeout(() => playTone(800, 0.1, 'sine', 0.2), 80);
+    },
+
+    oilDown() {
+        playTone(400, 0.15, 'sine', 0.2);
+        setTimeout(() => playTone(250, 0.2, 'sine', 0.2), 80);
+    },
+
+    cruiseMissileWarning() {
+        playTone(800, 0.1, 'square', 0.2);
+        setTimeout(() => playTone(600, 0.1, 'square', 0.2), 120);
+    },
+
+    unitPlaced() {
+        playTone(1000, 0.08, 'sine', 0.2);
+    },
+
+    waveStart() {
+        playTone(400, 0.15, 'square', 0.2);
+        setTimeout(() => playTone(600, 0.15, 'square', 0.2), 150);
+        setTimeout(() => playTone(800, 0.2, 'square', 0.2), 300);
+    },
+
+    victory() {
+        [400, 500, 600, 800].forEach((f, i) =>
+            setTimeout(() => playTone(f, 0.3, 'sine', 0.3), i * 200));
+    },
+
+    defeat() {
+        [400, 300, 200, 100].forEach((f, i) =>
+            setTimeout(() => playTone(f, 0.4, 'sawtooth', 0.2), i * 250));
+    },
+
+    stalemate() {
+        [300, 300, 200, 200].forEach((f, i) =>
+            setTimeout(() => playTone(f, 0.3, 'triangle', 0.2), i * 300));
+    },
+};
+
+
+/* ====================================================================
+   SECTION 14: CLOCK (preserved from canonical map)
+   ==================================================================== */
+
+function updateClock() {
+    const now = new Date();
+    const hours = String(now.getUTCHours()).padStart(2, '0');
+    const minutes = String(now.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(now.getUTCSeconds()).padStart(2, '0');
+    clockEl.innerText = `${hours}:${minutes}:${seconds}Z`;
+}
+
+setInterval(updateClock, 1000);
+updateClock();
+
+
+/* ====================================================================
+   SECTION 15: GAME LOOP (skeleton — update/draw stubs)
+   ==================================================================== */
+
+function update(dt) {
+    GameState.totalTime += dt;
+
+    switch (GameState.phase) {
+        case 'setup':
+            GameState.setupTimer -= dt;
+            // Cruise missiles still attack during setup (reduced rate)
+            updateCruiseMissiles(dt, true);
+            updatePlayerUnits(dt);
+            updateProjectiles(dt);
+            updateEnemyProjectiles(dt);
+            updateFABPatrol(dt);
+            updateMineLayers(dt);
+            updateMines(dt);
+            updateF14Strike(dt);
+            removeDeadEntities();
+            if (GameState.setupTimer <= 0) {
+                transitionToDefend();
+            }
+            break;
+
+        case 'defend':
+            // Spawn enemies from queue
+            updateSpawnQueue(dt);
+            // Update all entities
+            updateEnemies(dt);
+            updatePlayerUnits(dt);
+            updateProjectiles(dt);
+            updateEnemyProjectiles(dt);
+            updateCruiseMissiles(dt, false);
+            updateFABPatrol(dt);
+            updateMineLayers(dt);
+            updateMines(dt);
+            updateF14Strike(dt);
+            removeDeadEntities();
+            // Check if wave is complete (all enemies spawned and cleared)
+            checkWaveComplete();
+            break;
+
+        case 'waveEnd':
+            // Brief pause, then start next wave setup
+            GameState.waveEndTimer -= dt;
+            if (GameState.waveEndTimer <= 0) {
+                advanceToNextWave();
+            }
+            break;
+
+        case 'paused':
+        case 'intro':
+        case 'victory':
+        case 'defeat':
+        case 'stalemate':
+            // No updates
+            break;
+    }
+
+    // F-14 cooldown ticks in any active phase
+    if (GameState.phase === 'setup' || GameState.phase === 'defend') {
+        if (GameState.f14Cooldown > 0) {
+            GameState.f14Cooldown = Math.max(0, GameState.f14Cooldown - dt);
+        }
+    }
+
+    // Check win/lose conditions (only during active gameplay)
+    if (GameState.phase === 'setup' || GameState.phase === 'defend' || GameState.phase === 'waveEnd') {
+        checkWinLose();
+    }
+
+    updateUI();
+}
+
+
+/* ====================================================================
+   SECTION 15a: PHASE TRANSITIONS
+   ==================================================================== */
+
+function transitionToDefend() {
+    GameState.phase = 'defend';
+    GameState.spawnQueue = buildWaveSpawnQueue(GameState.wave);
+    GameState.spawnTimer = 0;
+    SFX.waveStart();
+}
+
+function checkWaveComplete() {
+    // Wave is complete when spawn queue is empty AND no enemies remain
+    if (GameState.spawnQueue.length === 0 && Entities.enemies.length === 0) {
+        GameState.phase = 'waveEnd';
+        GameState.waveEndTimer = 2.0; // brief pause before next wave
+    }
+}
+
+function advanceToNextWave() {
+    GameState.wave++;
+
+    // Check for stalemate (20 waves without win or loss)
+    if (GameState.wave > STALEMATE_WAVE && !GameState.passedStalemate) {
+        showStalemate();
+        return;
+    }
+
+    // Award wave income: oil_price * multiplier
+    const income = Math.round(GameState.oil * WAVE_INCOME_MULTIPLIER / 5) * 5;
+    GameState.funds += income;
+
+    // Unlock new paths if applicable
+    updateActivePaths();
+
+    // Start next setup phase
+    GameState.phase = 'setup';
+    GameState.setupTimer = SETUP_PHASE_DURATION;
+}
+
+function updateActivePaths() {
+    if (GameState.wave >= PATH_NORTH_UNLOCK_WAVE && !GameState.activePaths.includes('lane-north')) {
+        GameState.activePaths.push('lane-north');
+        document.getElementById('lane-north').style.display = '';
+    }
+    if (GameState.wave >= PATH_SOUTH_UNLOCK_WAVE && !GameState.activePaths.includes('lane-south')) {
+        GameState.activePaths.push('lane-south');
+        document.getElementById('lane-south').style.display = '';
+    }
+}
+
+
+/* ====================================================================
+   SECTION 15b: WAVE SPAWN QUEUE
+   ==================================================================== */
+
+function buildWaveSpawnQueue(waveNum) {
+    const queue = [];
+    const isUnlimited = GameState.passedStalemate;
+
+    // Calculate counts
+    let tankerCount, escortCount, f35Count;
+
+    if (isUnlimited) {
+        const extraWaves = waveNum - STALEMATE_WAVE;
+        tankerCount = STALEMATE_WAVE * TANKERS_PER_WAVE_MULT + extraWaves * UNLIMITED_TANKER_INCREMENT;
+        escortCount = Math.floor(STALEMATE_WAVE / ESCORTS_PER_WAVE_DIV) + extraWaves * UNLIMITED_ESCORT_INCREMENT;
+        f35Count = Math.floor((STALEMATE_WAVE - F35_START_WAVE + 1) / F35_PER_WAVE_DIV) +
+                   Math.floor(extraWaves / UNLIMITED_F35_EVERY_N_WAVES);
+    } else {
+        tankerCount = waveNum * TANKERS_PER_WAVE_MULT;
+        escortCount = Math.floor(waveNum / ESCORTS_PER_WAVE_DIV);
+        f35Count = waveNum >= F35_START_WAVE ? Math.floor((waveNum - F35_START_WAVE + 1) / F35_PER_WAVE_DIV) : 0;
+    }
+
+    // Wave scaling factors
+    const speedScale = Math.pow(1 + WAVE_SPEED_SCALING, waveNum - 1);
+    const hpScale = Math.pow(1 + WAVE_HP_SCALING, waveNum - 1);
+
+    // Unlimited mode additional scaling
+    const unlimitedSpeedMult = isUnlimited ? Math.pow(UNLIMITED_SPEED_MULT, waveNum - STALEMATE_WAVE) : 1;
+    const unlimitedHpMult = isUnlimited ? Math.pow(UNLIMITED_HP_MULT, waveNum - STALEMATE_WAVE) : 1;
+
+    const finalSpeedScale = speedScale * unlimitedSpeedMult;
+    const finalHpScale = hpScale * unlimitedHpMult;
+
+    // Build tanker entries
+    for (let i = 0; i < tankerCount; i++) {
+        const roll = Math.random();
+        let type, hp, speed, oilDestroy, oilEscape;
+        if (roll < TANKER_LARGE_CHANCE) {
+            type = 'tanker-large';
+            hp = TANKER_LARGE_HP;
+            speed = TANKER_LARGE_SPEED;
+            oilDestroy = OIL_LARGE_DESTROY;
+            oilEscape = OIL_LARGE_ESCAPE;
+        } else if (roll < TANKER_MED_CHANCE) {
+            type = 'tanker-med';
+            hp = TANKER_MED_HP;
+            speed = TANKER_MED_SPEED;
+            oilDestroy = OIL_MED_DESTROY;
+            oilEscape = OIL_MED_ESCAPE;
+        } else {
+            type = 'tanker-small';
+            hp = TANKER_SMALL_HP;
+            speed = TANKER_SMALL_SPEED;
+            oilDestroy = OIL_SMALL_DESTROY;
+            oilEscape = OIL_SMALL_ESCAPE;
+        }
+
+        // Assign to a random active path
+        const pathId = GameState.activePaths[Math.floor(Math.random() * GameState.activePaths.length)];
+
+        queue.push({
+            type, pathId,
+            hp: Math.round(hp * finalHpScale),
+            speed: speed * finalSpeedScale,
+            oilDestroy, oilEscape,
+        });
+    }
+
+    // Build escort entries
+    for (let i = 0; i < escortCount; i++) {
+        const pathId = GameState.activePaths[Math.floor(Math.random() * GameState.activePaths.length)];
+        queue.push({
+            type: 'destroyer',
+            pathId,
+            hp: Math.round(DESTROYER_HP * finalHpScale),
+            speed: DESTROYER_SPEED * finalSpeedScale,
+        });
+    }
+
+    // Build F-35 entries
+    for (let i = 0; i < f35Count; i++) {
+        queue.push({
+            type: 'f35',
+            pathId: null, // F-35s don't follow shipping lanes
+            hp: Math.round(F35_HP * finalHpScale),
+            speed: F35_SPEED * finalSpeedScale,
+        });
+    }
+
+    // Shuffle for varied spawn order (Fisher-Yates)
+    for (let i = queue.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [queue[i], queue[j]] = [queue[j], queue[i]];
+    }
+
+    return queue;
+}
+
+function updateSpawnQueue(dt) {
+    if (GameState.spawnQueue.length === 0) return;
+
+    GameState.spawnTimer -= dt;
+    if (GameState.spawnTimer <= 0) {
+        const entry = GameState.spawnQueue.shift();
+        spawnEnemy(entry);
+        GameState.spawnTimer = SPAWN_INTERVAL_SEC;
+    }
+}
+
+
+/* ====================================================================
+   SECTION 15c: ENEMY SPAWNING & CREATION
+   ==================================================================== */
+
+function spawnEnemy(entry) {
+    if (entry.type === 'f35') {
+        spawnF35(entry);
+        return;
+    }
+
+    // Ship-type enemies follow a path
+    const pathEl = lanePaths[entry.pathId];
+    if (!pathEl) return;
+
+    const totalLength = pathEl.getTotalLength();
+    const startPt = pathEl.getPointAtLength(0);
+
+    Entities.enemies.push({
+        type: entry.type,
+        pathId: entry.pathId,
+        hp: entry.hp,
+        hpMax: entry.hp,
+        speed: entry.speed,
+        dist: 0,                    // distance along path
+        totalLength: totalLength,
+        x: startPt.x,
+        y: startPt.y,
+        oilDestroy: entry.oilDestroy || 0,
+        oilEscape: entry.oilEscape || 0,
+        cooldownTimer: 0,
+        alive: true,
+    });
+}
+
+function spawnF35(entry) {
+    // F-35s fly across the map from a random edge
+    const fromLeft = Math.random() > 0.5;
+    const yPos = 100 + Math.random() * 1400;
+
+    Entities.enemies.push({
+        type: 'f35',
+        pathId: null,
+        hp: entry.hp,
+        hpMax: entry.hp,
+        speed: entry.speed,
+        x: fromLeft ? -50 : 2450,
+        y: yPos,
+        dx: fromLeft ? 1 : -1,     // direction
+        dy: (Math.random() - 0.5) * 0.3,
+        cooldownTimer: 0,
+        alive: true,
+    });
+}
+
+
+/* ====================================================================
+   SECTION 15d: ENTITY UPDATE STUBS
+   These will be fully implemented in Steps 3-6. Minimal versions here
+   so the phase state machine can run without errors.
+   ==================================================================== */
+
+function updateEnemies(dt) {
+    for (const enemy of Entities.enemies) {
+        if (!enemy.alive) continue;
+
+        if (enemy.type === 'f35') {
+            // F-35: fly across map
+            enemy.x += enemy.dx * enemy.speed * dt;
+            enemy.y += enemy.dy * enemy.speed * dt;
+            // F-35s attack while flying
+            updateEnemyCombat(enemy, dt);
+            // Remove if off-screen
+            if (enemy.x < -100 || enemy.x > 2500 || enemy.y < -100 || enemy.y > 1800) {
+                enemy.alive = false;
+            }
+            continue;
+        }
+
+        // Ship-type: follow path
+        const pathEl = lanePaths[enemy.pathId];
+        if (!pathEl) continue;
+
+        enemy.dist += enemy.speed * dt;
+
+        if (enemy.dist >= enemy.totalLength) {
+            // Escaped! Apply oil price penalty
+            handleTankerEscape(enemy);
+            enemy.alive = false;
+            continue;
+        }
+
+        const pt = pathEl.getPointAtLength(enemy.dist);
+        enemy.x = pt.x;
+        enemy.y = pt.y;
+
+        // Destroyers fire at player units while transiting
+        updateEnemyCombat(enemy, dt);
+    }
+}
+
+function handleTankerEscape(enemy) {
+    if (enemy.type.startsWith('tanker')) {
+        GameState.oil += enemy.oilEscape; // oilEscape is negative
+        SFX.oilDown();
+    }
+    // Destroyers escaping has no oil effect but is a missed opportunity
+}
+
+function handleEnemyKill(enemy) {
+    SFX.shipExplosion();
+    if (enemy.type.startsWith('tanker')) {
+        GameState.oil += enemy.oilDestroy;
+        SFX.oilUp();
+    } else if (enemy.type === 'destroyer') {
+        GameState.funds += ESCORT_KILL_BONUS;
+        // Contribute to F-14 charge
+        GameState.f14KillCounter++;
+        if (GameState.f14KillCounter >= F14_KILLS_PER_CHARGE && GameState.f14Charges < F14_MAX_CHARGES) {
+            GameState.f14Charges++;
+            GameState.f14KillCounter = 0;
+        }
+    } else if (enemy.type === 'f35') {
+        GameState.funds += F35_KILL_BONUS;
+    }
+}
+
+function updatePlayerUnits(dt) {
+    for (const unit of Entities.playerUnits) {
+        if (unit.hp <= 0) continue;
+
+        // Cooldown tick
+        if (unit.cooldownTimer > 0) {
+            unit.cooldownTimer -= dt;
+            continue;
+        }
+
+        // Skip depleted drone swarms
+        if (unit.attritable && unit.strikesRemaining <= 0) continue;
+
+        // Find best target in range
+        const target = findTarget(unit);
+        if (!target) continue;
+
+        // Fire projectile
+        fireProjectile(unit, target);
+        unit.cooldownTimer = unit.cooldown;
+
+        // Drone swarm attrition
+        if (unit.attritable) {
+            unit.strikesRemaining--;
+            if (unit.strikesRemaining <= 0) {
+                unit.hp = 0; // depleted, will be removed
+                spawnEffect(unit.x, unit.y, '#00ffff', 20, 0.5);
+            }
+        }
+    }
+}
+
+/**
+ * Find the best target for a player unit based on its target priority list.
+ * Returns the closest enemy of the highest-priority type within range.
+ */
+function findTarget(unit) {
+    // SAMs prioritize cruise missiles if they have anti-missile capability
+    if (unit.antiMissile && Entities.cruiseMissiles.length > 0) {
+        const inRange = Entities.cruiseMissiles.filter(m =>
+            Math.hypot(m.x - unit.x, m.y - unit.y) < unit.range
+        );
+        if (inRange.length > 0) {
+            return inRange.reduce((closest, m) =>
+                Math.hypot(m.x - unit.x, m.y - unit.y) < Math.hypot(closest.x - unit.x, closest.y - unit.y) ? m : closest
+            );
+        }
+    }
+
+    // Check target priority list
+    for (const targetType of unit.targets) {
+        const candidates = Entities.enemies.filter(e => {
+            if (!e.alive) return false;
+            if (Math.hypot(e.x - unit.x, e.y - unit.y) > unit.range) return false;
+
+            switch (targetType) {
+                case 'tanker':
+                    return e.type.startsWith('tanker');
+                case 'destroyer':
+                    return e.type === 'destroyer';
+                case 'f35':
+                    return e.type === 'f35';
+                case 'cruise_missile':
+                    return false; // handled above via antiMissile path
+                default:
+                    return false;
+            }
+        });
+
+        if (candidates.length > 0) {
+            // Return closest candidate
+            return candidates.reduce((closest, c) =>
+                Math.hypot(c.x - unit.x, c.y - unit.y) < Math.hypot(closest.x - unit.x, closest.y - unit.y) ? c : closest
+            );
+        }
+    }
+
+    return null;
+}
+
+function fireProjectile(unit, target) {
+    const isMissile = target.type === undefined; // cruise missile intercept
+    Entities.projectiles.push({
+        x: unit.x,
+        y: unit.y,
+        targetRef: target,
+        dmg: unit.dps,
+        speed: 800,
+        ownerUnit: unit,
+        isSplash: unit.splashRadius > 0,
+        splashRadius: unit.splashRadius || 0,
+        isIntercept: isMissile,
+        alive: true,
+    });
+}
+
+function updateProjectiles(dt) {
+    for (let i = Entities.projectiles.length - 1; i >= 0; i--) {
+        const p = Entities.projectiles[i];
+        if (!p.alive) {
+            Entities.projectiles.splice(i, 1);
+            continue;
+        }
+
+        const t = p.targetRef;
+
+        // Target dead/gone? Remove projectile
+        if (p.isIntercept) {
+            if (!t || t.hp <= 0) { Entities.projectiles.splice(i, 1); continue; }
+        } else {
+            if (!t || !t.alive) { Entities.projectiles.splice(i, 1); continue; }
+        }
+
+        // Move toward target
+        const dx = t.x - p.x;
+        const dy = t.y - p.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist < 20) {
+            // Hit!
+            if (p.isIntercept) {
+                // SAM intercept attempt
+                if (Math.random() < (p.ownerUnit.interceptChance || SAM_INTERCEPT_CHANCE)) {
+                    t.hp = 0; // destroy the cruise missile
+                    spawnEffect(t.x, t.y, '#33ff33', 15, 0.4);
+                }
+                // Miss or hit, projectile consumed
+            } else {
+                // Normal damage
+                t.hp -= p.dmg;
+
+                // Splash damage
+                if (p.isSplash && p.splashRadius > 0) {
+                    Entities.enemies.forEach(e => {
+                        if (e === t || !e.alive) return;
+                        if (Math.hypot(e.x - t.x, e.y - t.y) < p.splashRadius) {
+                            e.hp -= p.dmg * 0.5; // splash does 50% damage
+                        }
+                    });
+                    spawnEffect(t.x, t.y, '#ff6600', p.splashRadius, 0.5);
+                } else {
+                    spawnEffect(t.x, t.y, '#ffffff', 10, 0.3);
+                }
+
+                // Check if target killed
+                if (t.hp <= 0) {
+                    t.alive = false;
+                    handleEnemyKill(t);
+                    spawnEffect(t.x, t.y, '#ff3333', 30, 0.8);
+                }
+            }
+
+            Entities.projectiles.splice(i, 1);
+        } else {
+            // Advance projectile
+            p.x += (dx / dist) * p.speed * dt;
+            p.y += (dy / dist) * p.speed * dt;
+        }
+    }
+}
+
+function updateEnemyProjectiles(dt) {
+    for (let i = Entities.enemyProjectiles.length - 1; i >= 0; i--) {
+        const p = Entities.enemyProjectiles[i];
+        const t = p.targetRef;
+
+        // Target dead? Remove projectile
+        if (!t || t.hp <= 0) {
+            Entities.enemyProjectiles.splice(i, 1);
+            continue;
+        }
+
+        const dx = t.x - p.x;
+        const dy = t.y - p.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist < 20) {
+            // Hit! Apply damage
+            t.hp -= p.dmg;
+            spawnEffect(t.x, t.y, '#ff6600', 12, 0.3);
+            if (t.hp <= 0) {
+                spawnEffect(t.x, t.y, '#ff0000', 25, 0.6);
+            }
+            Entities.enemyProjectiles.splice(i, 1);
+        } else {
+            p.x += (dx / dist) * p.speed * dt;
+            p.y += (dy / dist) * p.speed * dt;
+        }
+    }
+}
+
+/**
+ * Escort destroyers and F-35s fire at player units.
+ * Called from updateEnemies indirectly — we add firing logic to enemy update.
+ */
+function updateEnemyCombat(enemy, dt) {
+    if (enemy.type !== 'destroyer' && enemy.type !== 'f35') return;
+
+    enemy.cooldownTimer -= dt;
+    if (enemy.cooldownTimer > 0) return;
+
+    const range = enemy.type === 'destroyer' ? DESTROYER_RANGE : F35_RANGE;
+    const dps = enemy.type === 'destroyer' ? DESTROYER_DPS : F35_DPS;
+    const cd = enemy.type === 'destroyer' ? DESTROYER_COOLDOWN : F35_COOLDOWN;
+
+    // Find target — prioritize mobile units (drones, FABs) for both types
+    const priorityOrder = ['low', 'medium', 'heavy']; // low signature = mobile = priority
+    let target = null;
+
+    for (const sig of priorityOrder) {
+        const candidates = Entities.playerUnits.filter(u =>
+            u.hp > 0 && u.signature === sig &&
+            Math.hypot(u.x - enemy.x, u.y - enemy.y) < range &&
+            !(enemy.type === 'f35' && u.signature === 'stealth') // F-35s can't target subs
+        );
+        if (candidates.length > 0) {
+            target = candidates.reduce((c, u) =>
+                Math.hypot(u.x - enemy.x, u.y - enemy.y) < Math.hypot(c.x - enemy.x, c.y - enemy.y) ? u : c
+            );
+            break;
+        }
+    }
+
+    // Also check stealth for destroyers (they can target subs)
+    if (!target && enemy.type === 'destroyer') {
+        const subs = Entities.playerUnits.filter(u =>
+            u.hp > 0 && u.signature === 'stealth' &&
+            Math.hypot(u.x - enemy.x, u.y - enemy.y) < range
+        );
+        if (subs.length > 0) {
+            target = subs[0];
+        }
+    }
+
+    if (target) {
+        Entities.enemyProjectiles.push({
+            x: enemy.x,
+            y: enemy.y,
+            targetRef: target,
+            dmg: dps,
+            speed: 550,
+        });
+        enemy.cooldownTimer = cd;
+    }
+}
+
+function updateCruiseMissiles(dt, isSetupPhase) {
+    // Spawn new cruise missiles based on wave intensity
+    const rate = CRUISE_MISSILE_BASE_RATE * GameState.wave * (isSetupPhase ? CRUISE_MISSILE_SETUP_MULT : 1);
+    if (Math.random() < rate * dt && Entities.playerUnits.length > 0) {
+        spawnCruiseMissile();
+    }
+
+    // Update existing cruise missiles
+    for (let i = Entities.cruiseMissiles.length - 1; i >= 0; i--) {
+        const m = Entities.cruiseMissiles[i];
+        if (m.hp <= 0) {
+            Entities.cruiseMissiles.splice(i, 1);
+            continue;
+        }
+
+        const t = m.targetRef;
+        // Retarget if target is dead
+        if (!t || t.hp <= 0) {
+            const newTarget = pickCruiseMissileTarget();
+            if (newTarget) {
+                m.targetRef = newTarget;
+            } else {
+                // No valid targets — missile flies off
+                Entities.cruiseMissiles.splice(i, 1);
+                continue;
+            }
+        }
+
+        const dx = m.targetRef.x - m.x;
+        const dy = m.targetRef.y - m.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist < 25) {
+            // Impact! Check evasion
+            const evadeChance = m.targetRef.evasion || 0;
+            if (Math.random() < evadeChance) {
+                // Evaded!
+                spawnEffect(m.x, m.y, '#666666', 15, 0.4);
+            } else {
+                // Hit!
+                m.targetRef.hp -= CRUISE_MISSILE_DAMAGE;
+                spawnEffect(m.targetRef.x, m.targetRef.y, '#ff0000', 35, 1.0);
+                if (m.targetRef.hp <= 0) {
+                    spawnEffect(m.targetRef.x, m.targetRef.y, '#ff6600', 50, 1.2);
+                }
+            }
+            Entities.cruiseMissiles.splice(i, 1);
+        } else {
+            m.x += (dx / dist) * CRUISE_MISSILE_SPEED * dt;
+            m.y += (dy / dist) * CRUISE_MISSILE_SPEED * dt;
+        }
+    }
+}
+
+function spawnCruiseMissile() {
+    const target = pickCruiseMissileTarget();
+    if (!target) return;
+
+    // Spawn from random offscreen position
+    const edge = Math.floor(Math.random() * 4);
+    let x, y;
+    switch (edge) {
+        case 0: x = Math.random() * 2400; y = -50; break;        // top
+        case 1: x = 2450; y = Math.random() * 1680; break;       // right
+        case 2: x = Math.random() * 2400; y = 1730; break;       // bottom
+        case 3: x = -50; y = Math.random() * 1680; break;        // left
+    }
+
+    Entities.cruiseMissiles.push({
+        x, y,
+        targetRef: target,
+        hp: 1,
+        speed: CRUISE_MISSILE_SPEED,
+    });
+    SFX.cruiseMissileWarning();
+}
+
+/**
+ * Pick a cruise missile target using weighted signature system.
+ * Higher signature = more likely to be targeted.
+ * Stealth units are immune.
+ */
+function pickCruiseMissileTarget() {
+    const candidates = Entities.playerUnits.filter(u => u.hp > 0 && u.signature !== 'stealth');
+    if (candidates.length === 0) return null;
+
+    // Weight by signature
+    const weighted = candidates.map(u => {
+        let weight;
+        switch (u.signature) {
+            case 'heavy':  weight = SIGNATURE_WEIGHT_HEAVY; break;
+            case 'medium': weight = SIGNATURE_WEIGHT_MEDIUM; break;
+            case 'low':    weight = SIGNATURE_WEIGHT_LOW; break;
+            default:       weight = 0;
+        }
+        return { unit: u, weight };
+    });
+
+    const totalWeight = weighted.reduce((sum, w) => sum + w.weight, 0);
+    if (totalWeight === 0) return null;
+
+    let roll = Math.random() * totalWeight;
+    for (const w of weighted) {
+        roll -= w.weight;
+        if (roll <= 0) return w.unit;
+    }
+    return weighted[weighted.length - 1].unit;
+}
+
+function updateFABPatrol(dt) {
+    for (const unit of Entities.playerUnits) {
+        if (unit.hp <= 0) continue;
+        if (unit.defId !== 4) continue; // Only FABs patrol
+
+        // Advance patrol angle
+        unit.patrolAngle += (unit.patrolSpeed / unit.patrolRadius) * dt;
+
+        // Calculate desired next position along circular patrol
+        const desiredX = unit.originX + unit.patrolRadius * Math.cos(unit.patrolAngle);
+        const desiredY = unit.originY + unit.patrolRadius * Math.sin(unit.patrolAngle);
+
+        // Land collision check: only move if destination is water
+        if (isPointInWater(desiredX, desiredY)) {
+            unit.x = desiredX;
+            unit.y = desiredY;
+        } else {
+            // Skip ahead in angle until we find water again
+            // (prevents FAB from getting stuck on land boundaries)
+            unit.patrolAngle += 0.2;
+        }
+    }
+}
+
+/**
+ * Mine layer system: each mine layer autonomously places mines within its radius
+ * along the tanker corridor. Mines detonate on proximity to ships.
+ */
+function updateMineLayers(dt) {
+    for (const unit of Entities.playerUnits) {
+        if (unit.hp <= 0) continue;
+        if (unit.defId !== 3) continue; // Only mine layers
+
+        // Count active mines belonging to this layer
+        const myMines = Entities.mines.filter(m => m.ownerUnit === unit && m.active);
+        unit.activeMines = myMines.length;
+
+        // Place new mines if below max and cooldown expired
+        if (unit.activeMines < unit.maxMines && unit.cooldownTimer <= 0) {
+            placeMine(unit);
+            unit.cooldownTimer = unit.cooldown;
+        }
+    }
+}
+
+function placeMine(mineLayer) {
+    // Find a valid water position within placement radius, along the tanker corridor
+    const maxAttempts = 20;
+    for (let i = 0; i < maxAttempts; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 50 + Math.random() * (mineLayer.range - 50);
+        const mx = mineLayer.x + Math.cos(angle) * dist;
+        const my = mineLayer.y + Math.sin(angle) * dist;
+
+        // Must be in water
+        if (!isPointInWater(mx, my)) continue;
+
+        // Must be reasonably close to a shipping lane (within ~150px)
+        let nearLane = false;
+        for (const pathId of GameState.activePaths) {
+            const path = lanePaths[pathId];
+            if (!path) continue;
+            // Sample several points along the path to check proximity
+            const totalLen = path.getTotalLength();
+            for (let t = 0; t < totalLen; t += 100) {
+                const pt = path.getPointAtLength(t);
+                if (Math.hypot(pt.x - mx, pt.y - my) < 150) {
+                    nearLane = true;
+                    break;
+                }
+            }
+            if (nearLane) break;
+        }
+        if (!nearLane) continue;
+
+        Entities.mines.push({
+            x: mx,
+            y: my,
+            ownerUnit: mineLayer,
+            damage: mineLayer.dps,
+            splashRadius: UNIT_DEFS[3].mineSplashRadius,
+            active: true,
+            respawnTimer: 0,
+        });
+        return;
+    }
+}
+
+function updateMines(dt) {
+    for (let i = Entities.mines.length - 1; i >= 0; i--) {
+        const mine = Entities.mines[i];
+
+        if (!mine.active) {
+            // Respawn timer
+            mine.respawnTimer -= dt;
+            if (mine.respawnTimer <= 0) {
+                // Remove this mine; the mine layer will place a new one
+                Entities.mines.splice(i, 1);
+            }
+            continue;
+        }
+
+        // Check proximity to any enemy ship (not aircraft)
+        for (const enemy of Entities.enemies) {
+            if (!enemy.alive) continue;
+            if (enemy.type === 'f35') continue; // Mines don't affect aircraft
+
+            if (Math.hypot(enemy.x - mine.x, enemy.y - mine.y) < 35) {
+                // DETONATE!
+                SFX.mineDetonate();
+                enemy.hp -= mine.damage;
+                spawnEffect(mine.x, mine.y, '#ff6600', mine.splashRadius, 0.8);
+
+                // Splash damage to nearby enemies
+                for (const other of Entities.enemies) {
+                    if (other === enemy || !other.alive || other.type === 'f35') continue;
+                    if (Math.hypot(other.x - mine.x, other.y - mine.y) < mine.splashRadius) {
+                        other.hp -= mine.damage * 0.5;
+                    }
+                }
+
+                // Check kills
+                for (const enemy2 of Entities.enemies) {
+                    if (enemy2.hp <= 0 && enemy2.alive) {
+                        enemy2.alive = false;
+                        handleEnemyKill(enemy2);
+                        spawnEffect(enemy2.x, enemy2.y, '#ff3333', 30, 0.8);
+                    }
+                }
+
+                // Mine deactivated, start respawn timer
+                mine.active = false;
+                mine.respawnTimer = UNIT_DEFS[3].mineRespawnTime;
+                break;
+            }
+        }
+    }
+}
+
+function removeDeadEntities() {
+    Entities.enemies = Entities.enemies.filter(e => e.alive);
+    Entities.playerUnits = Entities.playerUnits.filter(u => u.hp > 0);
+    // Projectiles, missiles cleaned up in their respective update functions
+}
+
+
+/* ====================================================================
+   SECTION 15e: WIN / LOSE / STALEMATE
+   ==================================================================== */
+
+function checkWinLose() {
+    if (GameState.oil < OIL_LOSE_THRESHOLD) {
+        showDefeat();
+    } else if (GameState.oil > OIL_WIN_THRESHOLD) {
+        showVictory();
+    }
+}
+
+function showVictory() {
+    GameState.phase = 'victory';
+    SFX.victory();
+    const endScreen = document.getElementById('screen-end');
+    endScreen.classList.remove('hidden');
+    document.getElementById('end-title').innerText = 'STRATEGIC VICTORY';
+    document.getElementById('end-message').innerText =
+        `Oil price reached $${GameState.oil.toFixed(2)}/barrel. Iran controls the Strait.\nWave ${GameState.wave} — ${getWaveDate(GameState.wave)}`;
+    document.getElementById('end-buttons').innerHTML =
+        '<button class="btn" onclick="window.location.reload()">RESTART</button>';
+    saveHighScore();
+}
+
+function showDefeat() {
+    GameState.phase = 'defeat';
+    SFX.defeat();
+    const endScreen = document.getElementById('screen-end');
+    endScreen.classList.remove('hidden');
+    document.getElementById('end-title').innerText = 'COALITION FORCES GUARANTEE SAFE PASSAGE';
+    document.getElementById('end-message').innerText =
+        `Oil price collapsed to $${GameState.oil.toFixed(2)}/barrel. The blockade is broken.\nWave ${GameState.wave} — ${getWaveDate(GameState.wave)}`;
+    document.getElementById('end-buttons').innerHTML =
+        '<button class="btn" onclick="window.location.reload()">RESTART</button>';
+    saveHighScore();
+}
+
+function showStalemate() {
+    GameState.phase = 'stalemate';
+    SFX.stalemate();
+    const endScreen = document.getElementById('screen-end');
+    endScreen.classList.remove('hidden');
+    document.getElementById('end-title').innerText = 'FOREVER WAR — STALEMATE';
+    document.getElementById('end-message').innerText =
+        `20 weeks. No resolution. Oil at $${GameState.oil.toFixed(2)}/barrel.\n${getWaveDate(GameState.wave)}`;
+    document.getElementById('end-buttons').innerHTML =
+        `<button class="btn" onclick="window.location.reload()">RESTART</button>
+         <button class="btn" onclick="continueAfterStalemate()">CONTINUE — UNLIMITED WAR</button>`;
+    saveHighScore();
+}
+
+function continueAfterStalemate() {
+    GameState.passedStalemate = true;
+    GameState.phase = 'setup';
+    GameState.setupTimer = SETUP_PHASE_DURATION;
+    document.getElementById('screen-end').classList.add('hidden');
+
+    // Award income for this transition wave
+    const income = Math.round(GameState.oil * WAVE_INCOME_MULTIPLIER / 5) * 5;
+    GameState.funds += income;
+
+    updateActivePaths();
+    updateUI();
+}
+
+// Expose to onclick
+window.continueAfterStalemate = continueAfterStalemate;
+
+
+/* ====================================================================
+   SECTION 15f: HIGH SCORE (localStorage)
+   ==================================================================== */
+
+function saveHighScore() {
+    try {
+        const existing = JSON.parse(localStorage.getItem('hormuz_scores') || '[]');
+        existing.push({
+            wave: GameState.wave,
+            oil: GameState.oil.toFixed(2),
+            result: GameState.phase,
+            date: new Date().toISOString(),
+        });
+        // Keep top 10 by wave count
+        existing.sort((a, b) => b.wave - a.wave);
+        localStorage.setItem('hormuz_scores', JSON.stringify(existing.slice(0, 10)));
+    } catch (e) {
+        // localStorage unavailable — silently ignore
+    }
+}
+
+function getHighScores() {
+    try {
+        return JSON.parse(localStorage.getItem('hormuz_scores') || '[]');
+    } catch (e) {
+        return [];
+    }
+}
+
+function draw() {
+    ctx.clearRect(0, 0, 2400, 1680);
+
+    // Draw order: range circles (under) → mines → enemies → player units → projectiles → effects
+
+    // --- Range circles for selected unit type (placement preview) ---
+    if (GameState.selectedUnitType !== -1) {
+        // Show range at cursor position (approximate center if no cursor tracking)
+        // Actual cursor tracking happens in mousemove; for now show on placed units
+    }
+
+    // --- Mines ---
+    drawMines();
+
+    // --- Enemies ---
+    Entities.enemies.forEach(e => {
+        if (!e.alive) return;
+        drawEnemy(e);
+    });
+
+    // --- Player units ---
+    Entities.playerUnits.forEach(u => {
+        drawPlayerUnit(u);
+    });
+
+    // --- Projectiles ---
+    drawProjectiles();
+
+    // --- Cruise missiles ---
+    drawCruiseMissiles();
+
+    // --- F-14 Strike ---
+    drawF14Strike();
+
+    // --- Effects ---
+    drawEffects();
+}
+
+
+/* ====================================================================
+   SECTION 15h: DRAWING — ENEMIES
+   ==================================================================== */
+
+function drawEnemy(e) {
+    ctx.save();
+
+    if (e.type.startsWith('tanker')) {
+        drawTanker(e);
+    } else if (e.type === 'destroyer') {
+        drawDestroyer(e);
+    } else if (e.type === 'f35') {
+        drawF35(e);
+    }
+
+    // Health bar (above all enemy types)
+    const barW = e.type === 'tanker-large' ? 60 : e.type === 'tanker-med' ? 45 : 35;
+    const hpFrac = e.hp / e.hpMax;
+    const barY = e.y - (e.type === 'f35' ? 25 : 35);
+    ctx.fillStyle = '#330000';
+    ctx.fillRect(e.x - barW / 2, barY, barW, 4);
+    ctx.fillStyle = hpFrac > 0.5 ? '#ff3333' : hpFrac > 0.25 ? '#ff6600' : '#ffff00';
+    ctx.fillRect(e.x - barW / 2, barY, barW * hpFrac, 4);
+
+    ctx.restore();
+}
+
+function drawTanker(e) {
+    // Ship hull shape — size varies by type
+    const size = e.type === 'tanker-large' ? 1.5 : e.type === 'tanker-med' ? 1.1 : 0.8;
+    const hw = 30 * size;  // half-width
+    const hh = 12 * size;  // half-height
+
+    ctx.shadowColor = '#ff3333';
+    ctx.shadowBlur = 8;
+    ctx.strokeStyle = '#ff3333';
+    ctx.lineWidth = 2;
+    ctx.fillStyle = 'rgba(255, 50, 50, 0.15)';
+
+    // Ship hull (pointed bow)
+    ctx.beginPath();
+    ctx.moveTo(e.x + hw + 10 * size, e.y);        // bow point
+    ctx.lineTo(e.x + hw - 5 * size, e.y - hh);    // top front
+    ctx.lineTo(e.x - hw, e.y - hh);                // top rear
+    ctx.lineTo(e.x - hw - 5 * size, e.y);          // stern
+    ctx.lineTo(e.x - hw, e.y + hh);                // bottom rear
+    ctx.lineTo(e.x + hw - 5 * size, e.y + hh);    // bottom front
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Size indicator text
+    ctx.fillStyle = '#ff3333';
+    ctx.font = `${10 * size}px "Courier New", monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const label = e.type === 'tanker-large' ? 'VLCC' : e.type === 'tanker-med' ? 'MED' : 'SML';
+    ctx.fillText(label, e.x, e.y);
+}
+
+function drawDestroyer(e) {
+    ctx.shadowColor = '#ffaa00';
+    ctx.shadowBlur = 10;
+    ctx.strokeStyle = '#ffaa00';
+    ctx.lineWidth = 2.5;
+    ctx.fillStyle = 'rgba(255, 170, 0, 0.2)';
+
+    // Angular warship shape
+    const hw = 28, hh = 10;
+    ctx.beginPath();
+    ctx.moveTo(e.x + hw + 12, e.y);       // sharp bow
+    ctx.lineTo(e.x + hw, e.y - hh);
+    ctx.lineTo(e.x - hw + 5, e.y - hh);
+    ctx.lineTo(e.x - hw, e.y - hh + 4);   // stepped stern
+    ctx.lineTo(e.x - hw - 5, e.y);
+    ctx.lineTo(e.x - hw, e.y + hh - 4);
+    ctx.lineTo(e.x - hw + 5, e.y + hh);
+    ctx.lineTo(e.x + hw, e.y + hh);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Bridge superstructure
+    ctx.strokeRect(e.x - 5, e.y - 6, 15, 12);
+
+    // Label
+    ctx.fillStyle = '#ffaa00';
+    ctx.font = '9px "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('DDG', e.x, e.y + 22);
+}
+
+function drawF35(e) {
+    ctx.shadowColor = '#ff33ff';
+    ctx.shadowBlur = 12;
+    ctx.strokeStyle = '#ff33ff';
+    ctx.lineWidth = 2;
+    ctx.fillStyle = 'rgba(255, 50, 255, 0.2)';
+
+    // Swept-wing jet silhouette
+    const dir = e.dx || 1;
+    ctx.beginPath();
+    ctx.moveTo(e.x + 18 * dir, e.y);          // nose
+    ctx.lineTo(e.x - 5 * dir, e.y - 15);      // left wing tip
+    ctx.lineTo(e.x - 10 * dir, e.y - 5);      // wing root
+    ctx.lineTo(e.x - 18 * dir, e.y - 8);      // tail
+    ctx.lineTo(e.x - 15 * dir, e.y);           // center rear
+    ctx.lineTo(e.x - 18 * dir, e.y + 8);      // tail bottom
+    ctx.lineTo(e.x - 10 * dir, e.y + 5);      // wing root bottom
+    ctx.lineTo(e.x - 5 * dir, e.y + 15);      // right wing tip
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#ff33ff';
+    ctx.font = '8px "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('F-35', e.x, e.y + 22);
+}
+
+
+/* ====================================================================
+   SECTION 15i: DRAWING — PLAYER UNITS
+   ==================================================================== */
+
+function drawPlayerUnit(u) {
+    ctx.save();
+    const def = UNIT_DEFS[u.defId];
+
+    // Range circle on hover/selection (shown for all units, faintly)
+    if (u === GameState.selectedPlacedUnit) {
+        ctx.strokeStyle = 'rgba(0, 255, 255, 0.15)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([8, 8]);
+        ctx.beginPath();
+        ctx.arc(u.x, u.y, u.range, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    ctx.shadowColor = '#00ffff';
+    ctx.shadowBlur = 10;
+
+    // Draw unit-type-specific shape
+    switch (u.defId) {
+        case 0: drawUnitBattery(u); break;
+        case 1: drawUnitSAM(u); break;
+        case 2: drawUnitDrone(u); break;
+        case 3: drawUnitMinelayer(u); break;
+        case 4: drawUnitFAB(u); break;
+        case 5: drawUnitSub(u); break;
+    }
+
+    // Health bar
+    const hpFrac = u.hp / u.hpMax;
+    const barW = 40;
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = hpFrac > 0.5 ? '#33ff33' : hpFrac > 0.25 ? '#ffaa00' : '#ff3333';
+    ctx.fillRect(u.x - barW / 2, u.y - 38, barW * hpFrac, 4);
+    ctx.strokeStyle = 'rgba(0, 255, 255, 0.5)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(u.x - barW / 2, u.y - 38, barW, 4);
+
+    // Tier indicator
+    if (u.tier > 0) {
+        ctx.fillStyle = '#ffff33';
+        ctx.font = '10px "Courier New", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('★'.repeat(u.tier), u.x, u.y + 32);
+    }
+
+    ctx.restore();
+}
+
+// --- Individual unit drawing functions ---
+
+function drawUnitBattery(u) {
+    // Upward triangle with base — heavy weapon platform
+    ctx.strokeStyle = '#ffff33';
+    ctx.fillStyle = 'rgba(255, 255, 50, 0.15)';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(u.x, u.y - 22);         // apex
+    ctx.lineTo(u.x - 18, u.y + 14);    // bottom-left
+    ctx.lineTo(u.x + 18, u.y + 14);    // bottom-right
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Base platform line
+    ctx.beginPath();
+    ctx.moveTo(u.x - 22, u.y + 18);
+    ctx.lineTo(u.x + 22, u.y + 18);
+    ctx.stroke();
+
+    // Label
+    ctx.fillStyle = '#ffff33';
+    ctx.font = '9px "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('BATT', u.x, u.y + 3);
+}
+
+function drawUnitSAM(u) {
+    // Cross/plus shape with radar dish
+    ctx.strokeStyle = '#33ff33';
+    ctx.fillStyle = 'rgba(50, 255, 50, 0.15)';
+    ctx.lineWidth = 2.5;
+
+    // Plus shape
+    const s = 18;
+    ctx.beginPath();
+    ctx.moveTo(u.x - s, u.y); ctx.lineTo(u.x + s, u.y);
+    ctx.moveTo(u.x, u.y - s); ctx.lineTo(u.x, u.y + s);
+    ctx.stroke();
+
+    // Circle center (radar dish)
+    ctx.beginPath();
+    ctx.arc(u.x, u.y, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Tick marks on arms
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(u.x - s + 3, u.y - 4); ctx.lineTo(u.x - s + 3, u.y + 4);
+    ctx.moveTo(u.x + s - 3, u.y - 4); ctx.lineTo(u.x + s - 3, u.y + 4);
+    ctx.stroke();
+
+    ctx.fillStyle = '#33ff33';
+    ctx.font = '8px "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('SAM', u.x, u.y + 3);
+}
+
+function drawUnitDrone(u) {
+    // Hexagon with rotor marks
+    ctx.strokeStyle = '#00ffff';
+    ctx.fillStyle = 'rgba(0, 255, 255, 0.12)';
+    ctx.lineWidth = 2;
+
+    const r = 18;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+        const angle = (Math.PI / 3) * i - Math.PI / 6;
+        const px = u.x + r * Math.cos(angle);
+        const py = u.y + r * Math.sin(angle);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Rotor lines (3 spokes)
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 3; i++) {
+        const angle = (Math.PI / 3) * (2 * i) - Math.PI / 6;
+        ctx.beginPath();
+        ctx.moveTo(u.x, u.y);
+        ctx.lineTo(u.x + (r - 4) * Math.cos(angle), u.y + (r - 4) * Math.sin(angle));
+        ctx.stroke();
+    }
+
+    // Strike counter
+    if (u.attritable) {
+        ctx.fillStyle = '#00ffff';
+        ctx.font = '9px "Courier New", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${u.strikesRemaining}`, u.x, u.y + 4);
+    }
+}
+
+function drawUnitMinelayer(u) {
+    // Concentric circles (mine symbol)
+    ctx.strokeStyle = '#ffaa00';
+    ctx.fillStyle = 'rgba(255, 170, 0, 0.1)';
+    ctx.lineWidth = 2;
+
+    ctx.beginPath();
+    ctx.arc(u.x, u.y, 18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(u.x, u.y, 10, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(u.x, u.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#ffaa00';
+    ctx.font = '7px "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('MNL', u.x, u.y + 28);
+}
+
+function drawUnitFAB(u) {
+    // Small arrowhead/chevron — fast attack boat
+    ctx.strokeStyle = '#3399ff';
+    ctx.fillStyle = 'rgba(50, 150, 255, 0.2)';
+    ctx.lineWidth = 2.5;
+
+    // Compute heading from patrol angle
+    const angle = u.patrolAngle || 0;
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+
+    // Arrowhead pointing in direction of travel
+    const len = 16, wing = 12;
+    ctx.beginPath();
+    ctx.moveTo(u.x + len * cos, u.y + len * sin);                              // nose
+    ctx.lineTo(u.x - len * cos - wing * sin, u.y - len * sin + wing * cos);    // left wing
+    ctx.lineTo(u.x - len * cos * 0.3, u.y - len * sin * 0.3);                 // center notch
+    ctx.lineTo(u.x - len * cos + wing * sin, u.y - len * sin - wing * cos);    // right wing
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Wake trail (short lines behind)
+    ctx.strokeStyle = 'rgba(50, 150, 255, 0.3)';
+    ctx.lineWidth = 1;
+    for (let i = 1; i <= 3; i++) {
+        const wx = u.x - (len + 5 * i) * cos;
+        const wy = u.y - (len + 5 * i) * sin;
+        ctx.beginPath();
+        ctx.moveTo(wx - 3 * sin, wy + 3 * cos);
+        ctx.lineTo(wx + 3 * sin, wy - 3 * cos);
+        ctx.stroke();
+    }
+}
+
+function drawUnitSub(u) {
+    // Elongated oval with periscope
+    ctx.strokeStyle = '#888888';
+    ctx.fillStyle = 'rgba(100, 100, 100, 0.2)';
+    ctx.lineWidth = 2;
+
+    // Hull
+    ctx.beginPath();
+    ctx.ellipse(u.x, u.y, 24, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Periscope
+    ctx.strokeStyle = '#aaaaaa';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(u.x, u.y - 10);
+    ctx.lineTo(u.x, u.y - 22);
+    ctx.lineTo(u.x + 6, u.y - 22);
+    ctx.stroke();
+
+    // Stealth indicator
+    ctx.fillStyle = '#888888';
+    ctx.font = '7px "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('SUB', u.x, u.y + 4);
+
+    // Dashed stealth ring
+    ctx.setLineDash([3, 5]);
+    ctx.strokeStyle = 'rgba(100, 100, 100, 0.3)';
+    ctx.beginPath();
+    ctx.arc(u.x, u.y, 28, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+}
+
+
+/* ====================================================================
+   SECTION 15j: DRAWING — PROJECTILES, MINES, MISSILES, EFFECTS
+   ==================================================================== */
+
+function drawProjectiles() {
+    // Player projectiles (white/cyan)
+    Entities.projectiles.forEach(p => {
+        ctx.save();
+        ctx.shadowColor = '#ffffff';
+        ctx.shadowBlur = 6;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    });
+
+    // Enemy projectiles (orange/red)
+    Entities.enemyProjectiles.forEach(p => {
+        ctx.save();
+        ctx.shadowColor = '#ffaa00';
+        ctx.shadowBlur = 6;
+        ctx.fillStyle = '#ffaa00';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    });
+}
+
+function drawCruiseMissiles() {
+    Entities.cruiseMissiles.forEach(m => {
+        ctx.save();
+        ctx.shadowColor = '#ff0000';
+        ctx.shadowBlur = 12;
+        ctx.fillStyle = '#ff0000';
+        // Triangle pointing toward target
+        ctx.beginPath();
+        ctx.moveTo(m.x, m.y - 8);
+        ctx.lineTo(m.x - 5, m.y + 8);
+        ctx.lineTo(m.x + 5, m.y + 8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    });
+}
+
+function drawMines() {
+    Entities.mines.forEach(m => {
+        ctx.save();
+        // Pulsing red dot
+        const pulse = 0.5 + 0.5 * Math.sin(GameState.totalTime * 3 + m.x);
+        ctx.shadowColor = '#ff0000';
+        ctx.shadowBlur = 8 * pulse;
+        ctx.fillStyle = `rgba(255, 0, 0, ${0.4 + 0.4 * pulse})`;
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, 6, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Outer ring
+        ctx.strokeStyle = `rgba(255, 0, 0, ${0.3 * pulse})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, 12, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    });
+}
+
+function drawEffects() {
+    // Visual effects (explosions, flashes) — implemented in later steps
+    for (let i = Entities.effects.length - 1; i >= 0; i--) {
+        const fx = Entities.effects[i];
+        fx.age += 0.016; // approximate
+        if (fx.age > fx.duration) {
+            Entities.effects.splice(i, 1);
+            continue;
+        }
+        const alpha = 1 - (fx.age / fx.duration);
+        const radius = fx.radius * (1 + fx.age / fx.duration);
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.shadowColor = fx.color;
+        ctx.shadowBlur = 15;
+        ctx.strokeStyle = fx.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(fx.x, fx.y, radius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+function spawnEffect(x, y, color, radius, duration) {
+    Entities.effects.push({ x, y, color, radius, duration, age: 0 });
+}
+
+function gameLoop(timestamp) {
+    if (GameState.lastTick === 0) {
+        GameState.lastTick = timestamp;
+    }
+
+    const dt = Math.min((timestamp - GameState.lastTick) / 1000, 0.1); // cap at 100ms
+    GameState.lastTick = timestamp;
+
+    if (GameState.phase !== 'intro') {
+        update(dt);
+        draw();
+    }
+
+    requestAnimationFrame(gameLoop);
+}
+
+
+/* ====================================================================
+   SECTION 16: INITIALIZATION
+   ==================================================================== */
+
+function startGame() {
+    document.getElementById('screen-intro').classList.add('hidden');
+    GameState.phase = 'setup';
+    GameState.setupTimer = SETUP_PHASE_DURATION;
+    GameState.oil = STARTING_OIL_PRICE;
+    GameState.funds = STARTING_FUNDS;
+    GameState.wave = 1;
+    toggleSidebar(); // Open sidebar on start
+    updateUI();
+}
+
+function init() {
+    updateViewportTransform();
+
+    // Wire up intro button
+    document.getElementById('btn-start').addEventListener('click', startGame);
+
+    // Wire up sidebar toggle
+    document.getElementById('btn-sidebar').addEventListener('click', toggleSidebar);
+
+    // Initial UI
+    updateUI();
+
+    // Start the loop
+    requestAnimationFrame(gameLoop);
+}
+
+window.addEventListener('load', init);
+
+
+/* ====================================================================
+   SECTION 17: REGRESSION TESTS
+   Tests verify that the canonical map SVG elements are present and
+   unchanged. Run via Ctrl+T in browser console.
+   ==================================================================== */
+
+const RegressionTests = {
+    results: [],
+
+    assert(name, condition, detail) {
+        this.results.push({ name, pass: !!condition, detail: detail || '' });
+    },
+
+    run() {
+        this.results = [];
+
+        // --- SVG structure tests ---
+        this.assert('SVG viewBox',
+            svgEl.getAttribute('viewBox') === '0 0 2400 1680',
+            svgEl.getAttribute('viewBox'));
+
+        this.assert('Iran coastline path',
+            iranCoast.getAttribute('d') === 'M -24,-24 L 2424,-24 L 2424,1320 L 2040,1008 L 1752,456 L 1248,372 L 768,624 L -24,312 Z',
+            iranCoast.getAttribute('d'));
+
+        this.assert('Arabia coastline path',
+            arabiaCoast.getAttribute('d') === 'M -24,1704 L 2424,1704 L 2424,1680 L 1920,1632 L 1440,1320 L 1404,720 L 1236,864 L 1008,1080 L 720,1224 L 360,1320 L -24,1344 Z',
+            arabiaCoast.getAttribute('d'));
+
+        this.assert('TR-7 shipping lane',
+            lanePaths['lane-tr7'].getAttribute('d') === 'M 120,1080 L 600,912 L 960,720 L 1272,600 L 1632,840 L 2280,1392',
+            lanePaths['lane-tr7'].getAttribute('d'));
+
+        this.assert('Qeshm island polygon',
+            document.getElementById('island-qeshm').getAttribute('points') === '950,570 1230,440 1260,500 980,640');
+
+        this.assert('Hormuz island present',
+            document.getElementById('island-hormuz') !== null);
+
+        this.assert('Larak island present',
+            document.getElementById('island-larak') !== null);
+
+        this.assert('All 8 islands present',
+            islandElements.every(el => el !== null),
+            `Found: ${islandElements.filter(el => el !== null).length}/8`);
+
+        // --- Canvas presence ---
+        this.assert('Game canvas exists',
+            canvas !== null && canvas.tagName === 'CANVAS');
+
+        this.assert('Canvas dimensions',
+            canvas.width === 2400 && canvas.height === 1680,
+            `${canvas.width}x${canvas.height}`);
+
+        // --- Constants sanity ---
+        this.assert('Starting oil price',
+            STARTING_OIL_PRICE === 85);
+
+        this.assert('Win threshold > lose threshold',
+            OIL_WIN_THRESHOLD > OIL_LOSE_THRESHOLD);
+
+        this.assert('Unit defs count',
+            UNIT_DEFS.length === 6,
+            UNIT_DEFS.length);
+
+        // --- Placement validation tests ---
+        // Iran mainland (roughly center of Iran landmass, should be land)
+        this.assert('Iran mainland is land',
+            isPointInIran(600, 100));
+
+        // Arabian territory (south side)
+        this.assert('Arabia is land',
+            isPointInArabia(500, 1500));
+
+        // Water (center of strait)
+        this.assert('Strait center is water',
+            isPointInWater(1200, 750));
+
+        // Placement: land unit on Iran = valid
+        this.assert('Land unit on Iran = valid',
+            validatePlacement(UNIT_DEFS[0], 600, 100).valid);
+
+        // Placement: land unit on Arabia = invalid
+        this.assert('Land unit on Arabia = invalid',
+            !validatePlacement(UNIT_DEFS[0], 500, 1500).valid);
+
+        // Placement: water unit in strait = valid
+        this.assert('Water unit in strait = valid',
+            validatePlacement(UNIT_DEFS[4], 1200, 750).valid);
+
+        // Placement: water unit on Iran = invalid
+        this.assert('Water unit on land = invalid',
+            !validatePlacement(UNIT_DEFS[4], 600, 100).valid);
+
+        // --- Date formatting ---
+        this.assert('Wave 1 date',
+            getWaveDate(1) === '01 MAR 2026',
+            getWaveDate(1));
+
+        this.assert('Wave 2 date',
+            getWaveDate(2) === '08 MAR 2026',
+            getWaveDate(2));
+
+        this.assert('Wave 20 date (stalemate)',
+            getWaveDate(20) === '19 JUL 2026',
+            getWaveDate(20));
+
+        // --- Economy tests ---
+        this.assert('Wave income formula',
+            Math.round(85 * WAVE_INCOME_MULTIPLIER / 5) * 5 === 1020,
+            `85 * ${WAVE_INCOME_MULTIPLIER} rounded to 5 = ${Math.round(85 * WAVE_INCOME_MULTIPLIER / 5) * 5}`);
+
+        this.assert('Oil thresholds: win=$250 lose=$60',
+            OIL_WIN_THRESHOLD === 250 && OIL_LOSE_THRESHOLD === 60);
+
+        this.assert('Small tanker oil: +3 destroy, -2 escape',
+            OIL_SMALL_DESTROY === 3 && OIL_SMALL_ESCAPE === -2);
+
+        this.assert('Med tanker oil: +6 destroy, -4 escape',
+            OIL_MED_DESTROY === 6 && OIL_MED_ESCAPE === -4);
+
+        this.assert('Large tanker oil: +9 destroy, -6 escape',
+            OIL_LARGE_DESTROY === 9 && OIL_LARGE_ESCAPE === -6);
+
+        // --- Wave spawn tests ---
+        // Save and restore game state for spawn queue test
+        const savedState = { ...GameState, activePaths: [...GameState.activePaths] };
+
+        GameState.activePaths = ['lane-tr7'];
+        GameState.passedStalemate = false;
+        const w1Queue = buildWaveSpawnQueue(1);
+        const w1Tankers = w1Queue.filter(e => e.type.startsWith('tanker'));
+        const w1Escorts = w1Queue.filter(e => e.type === 'destroyer');
+        this.assert('Wave 1: 3 tankers',
+            w1Tankers.length === 3,
+            `Got ${w1Tankers.length}`);
+        this.assert('Wave 1: 0 escorts',
+            w1Escorts.length === 0,
+            `Got ${w1Escorts.length}`);
+
+        const w3Queue = buildWaveSpawnQueue(3);
+        const w3Escorts = w3Queue.filter(e => e.type === 'destroyer');
+        this.assert('Wave 3: 1 escort',
+            w3Escorts.length === 1,
+            `Got ${w3Escorts.length}`);
+
+        const w5Queue = buildWaveSpawnQueue(5);
+        const w5F35s = w5Queue.filter(e => e.type === 'f35');
+        this.assert('Wave 5: F-35s appear',
+            w5F35s.length >= 1,
+            `Got ${w5F35s.length}`);
+
+        // Restore state
+        Object.assign(GameState, savedState);
+
+        // --- Phase transition tests ---
+        this.assert('Stalemate wave = 20',
+            STALEMATE_WAVE === 20);
+
+        this.assert('Setup phase duration = 18',
+            SETUP_PHASE_DURATION === 18);
+
+        // --- F-14 mechanic tests ---
+        this.assert('F-14 kills per charge',
+            F14_KILLS_PER_CHARGE === 2);
+        this.assert('F-14 max charges',
+            F14_MAX_CHARGES === 3);
+
+        // Test F-14 charge accumulation logic
+        const savedF14 = { charges: GameState.f14Charges, counter: GameState.f14KillCounter, funds: GameState.funds };
+        GameState.f14Charges = 0;
+        GameState.f14KillCounter = 0;
+        GameState.funds = 0;
+        handleEnemyKill({ type: 'destroyer' });
+        this.assert('F-14: 1 destroyer kill = 1 counter, 0 charges',
+            GameState.f14KillCounter === 1 && GameState.f14Charges === 0);
+        handleEnemyKill({ type: 'destroyer' });
+        this.assert('F-14: 2 destroyer kills = 0 counter, 1 charge',
+            GameState.f14KillCounter === 0 && GameState.f14Charges === 1);
+        this.assert('Destroyer kill bonus applied',
+            GameState.funds === ESCORT_KILL_BONUS * 2);
+        GameState.f14Charges = savedF14.charges;
+        GameState.f14KillCounter = savedF14.counter;
+        GameState.funds = savedF14.funds;
+
+        // --- handleEnemyKill / handleTankerEscape oil tests ---
+        const savedOil = GameState.oil;
+        GameState.oil = 100;
+        handleEnemyKill({ type: 'tanker-small', oilDestroy: OIL_SMALL_DESTROY });
+        this.assert('Small tanker kill raises oil by 3',
+            GameState.oil === 103, `Oil = ${GameState.oil}`);
+        handleTankerEscape({ type: 'tanker-large', oilEscape: OIL_LARGE_ESCAPE });
+        this.assert('Large tanker escape drops oil by 6',
+            GameState.oil === 97, `Oil = ${GameState.oil}`);
+        GameState.oil = savedOil;
+
+        // --- Path unlocking ---
+        this.assert('North path unlocks at wave ' + PATH_NORTH_UNLOCK_WAVE,
+            PATH_NORTH_UNLOCK_WAVE === 8);
+        this.assert('South path unlocks at wave ' + PATH_SOUTH_UNLOCK_WAVE,
+            PATH_SOUTH_UNLOCK_WAVE === 15);
+
+        // --- Upgrade system tests ---
+        this.assert('Upgrade cost multiplier is 1.4',
+            UPGRADE_COST_MULTIPLIER === 1.4);
+
+        // Test upgrade cost calculation
+        const batteryUpgCost = Math.round(UNIT_DEFS[0].cost * Math.pow(UPGRADE_COST_MULTIPLIER, 1));
+        this.assert('Battery Tier 1 upgrade cost',
+            batteryUpgCost === 280,
+            `Got ${batteryUpgCost}`);
+
+        // Test upgrade application
+        const testUnit = createPlayerUnit(UNIT_DEFS[0], 100, 100);
+        const origRange = testUnit.range;
+        const savedFunds2 = GameState.funds;
+        GameState.funds = 10000;
+        const upgraded = upgradeUnit(testUnit);
+        this.assert('Upgrade Tier 0→1 succeeds',
+            upgraded && testUnit.tier === 1);
+        this.assert('Upgrade increases range for battery',
+            testUnit.range > origRange,
+            `${origRange} → ${testUnit.range}`);
+        GameState.funds = savedFunds2;
+
+        // --- Cruise missile targeting ---
+        this.assert('Stealth units immune to cruise missiles',
+            UNIT_DEFS[5].signature === 'stealth');
+        this.assert('Signature weight: heavy > medium > low',
+            SIGNATURE_WEIGHT_HEAVY > SIGNATURE_WEIGHT_MEDIUM &&
+            SIGNATURE_WEIGHT_MEDIUM > SIGNATURE_WEIGHT_LOW);
+        this.assert('SAM intercept chance = 30%',
+            SAM_INTERCEPT_CHANCE === 0.30);
+
+        // --- Evasion values ---
+        this.assert('Drone evasion = 90%',
+            UNIT_DEFS[2].evasion === EVASION_LOW && EVASION_LOW === 0.90);
+        this.assert('Battery evasion = 5%',
+            UNIT_DEFS[0].evasion === EVASION_HEAVY && EVASION_HEAVY === 0.05);
+
+        // --- Unit placement types ---
+        this.assert('Battery is land placement',
+            UNIT_DEFS[0].placement === 'land');
+        this.assert('FAB is water placement',
+            UNIT_DEFS[4].placement === 'water');
+        this.assert('Mine layer is coast placement',
+            UNIT_DEFS[3].placement === 'coast');
+        this.assert('Sub is water placement',
+            UNIT_DEFS[5].placement === 'water');
+
+        // --- All shipping lane paths exist ---
+        this.assert('TR-7 path element exists',
+            lanePaths['lane-tr7'] !== null);
+        this.assert('North path element exists',
+            lanePaths['lane-north'] !== null);
+        this.assert('South path element exists',
+            lanePaths['lane-south'] !== null);
+
+        // --- Audio system ---
+        this.assert('SFX object has required methods',
+            typeof SFX.missileLaunch === 'function' &&
+            typeof SFX.shipExplosion === 'function' &&
+            typeof SFX.f14Flyby === 'function' &&
+            typeof SFX.mineDetonate === 'function');
+
+        // --- F-35 constants ---
+        this.assert('F-35s start at wave 5',
+            F35_START_WAVE === 5);
+        this.assert('F-35 kill bonus > escort kill bonus',
+            F35_KILL_BONUS > ESCORT_KILL_BONUS);
+
+        // --- Report ---
+        const passed = this.results.filter(r => r.pass).length;
+        const failed = this.results.filter(r => !r.pass);
+        console.log(`%c=== REGRESSION TESTS: ${passed}/${this.results.length} passed ===`,
+            passed === this.results.length ? 'color: #33ff33' : 'color: #ff3333');
+        if (failed.length > 0) {
+            console.log('%cFAILED:', 'color: #ff3333');
+            failed.forEach(f => console.log(`  ✗ ${f.name} ${f.detail ? '(' + f.detail + ')' : ''}`));
+        }
+        return { passed, total: this.results.length, failed };
+    }
+};
+
+// Ctrl+T to run tests
+window.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === 't') {
+        e.preventDefault();
+        RegressionTests.run();
+    }
+});
+
+// Auto-run tests on load (results in console)
+window.addEventListener('load', () => {
+    setTimeout(() => RegressionTests.run(), 500);
+});
+</script>
+</body>
+</html>
