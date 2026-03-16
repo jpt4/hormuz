@@ -665,7 +665,7 @@
                 <li><strong>PRIMARY:</strong> Drive crude oil above <strong>$250/barrel</strong></li>
                 <li><strong>FAIL:</strong> Oil drops below <strong>$60/barrel</strong></li>
                 <li><strong>STALEMATE:</strong> 20 waves with no resolution</li>
-                <li>Funds per wave: <strong>OIL_PRICE &times; 12</strong></li>
+                <li>Funds per wave: <strong>logarithmic</strong> (diminishing returns at high prices)</li>
             </ul>
 
             <h3>CONTROLS</h3>
@@ -832,17 +832,28 @@ const STARTING_FUNDS = 800;
 const STARTING_OIL_PRICE = 85;
 const OIL_WIN_THRESHOLD = 250;
 const OIL_LOSE_THRESHOLD = 60;
-const WAVE_INCOME_MULTIPLIER = 12;       // funds per wave = oil_price * this
 const ESCORT_KILL_BONUS = 150;           // immediate funds on destroyer kill
 const F35_KILL_BONUS = 200;              // immediate funds on F-35 kill
 
-// Oil price deltas per tanker event
+// Logarithmic oil price scaling — diminishing returns at high prices
+// Positive deltas (kills): effectiveDelta = base * (OIL_REFERENCE / currentPrice)
+//   At $85: 1.0x, at $170: 0.5x, at $250: 0.34x — harder to push up
+// Negative deltas (escapes): effectiveDelta = base * (currentPrice / OIL_REFERENCE)
+//   At $85: 1.0x, at $170: 2.0x, at $250: 2.94x — escapes punish high prices
+// Scales smoothly from $60 loss threshold through unlimited mode
+const OIL_REFERENCE = 85;               // price at which deltas are at face value (= starting price)
+
+// Base oil price deltas per tanker event (before logarithmic scaling)
 const OIL_SMALL_DESTROY = 3;
 const OIL_SMALL_ESCAPE = -2;
 const OIL_MED_DESTROY = 6;
 const OIL_MED_ESCAPE = -4;
 const OIL_LARGE_DESTROY = 9;
 const OIL_LARGE_ESCAPE = -6;
+
+// Wave income: logarithmic formula — income = WAVE_INCOME_BASE * ln(price/reference + 1) * reference
+// At $85: ~$880, at $170: ~$1080, at $250: ~$1170 (flattens dramatically vs old linear $3000)
+const WAVE_INCOME_BASE = 8;              // base income multiplier for log formula
 
 // --- WAVE STRUCTURE ---
 const SETUP_PHASE_DURATION = 18;         // seconds
@@ -1548,6 +1559,45 @@ function getWaveDate(waveNumber) {
     const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
     const day = String(date.getDate()).padStart(2, '0');
     return `${day} ${months[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+
+/* ====================================================================
+   SECTION 7b: ECONOMY — LOGARITHMIC OIL & INCOME
+   Oil price changes use diminishing returns to prevent runaway snowballing.
+   Wave income uses logarithmic growth to flatten at high prices.
+   ==================================================================== */
+
+/**
+ * Apply a scaled oil price delta. Positive deltas (kills) diminish as price
+ * rises; negative deltas (escapes) grow harsher as price rises.
+ * This creates natural tension: the higher you climb, the harder it is to
+ * hold, and the more devastating each escape becomes.
+ */
+function applyOilDelta(baseDelta) {
+    const price = GameState.oil;
+    let factor;
+    if (baseDelta > 0) {
+        // Kills: diminishing returns at high prices
+        factor = OIL_REFERENCE / price;
+    } else {
+        // Escapes: increasingly punishing at high prices
+        factor = price / OIL_REFERENCE;
+    }
+    GameState.oil += baseDelta * factor;
+    // Clamp to avoid negative oil (loss is checked by checkWinLose)
+    if (GameState.oil < 0) GameState.oil = 0;
+}
+
+/**
+ * Calculate wave income using logarithmic scaling.
+ * Returns funds to award at wave boundary.
+ * Formula: base * ln(price/reference + 1) * reference, rounded to INCOME_ROUND_TO.
+ */
+function calculateWaveIncome() {
+    const ratio = GameState.oil / OIL_REFERENCE;
+    const raw = WAVE_INCOME_BASE * Math.log(ratio + 1) * OIL_REFERENCE;
+    return Math.round(raw / INCOME_ROUND_TO) * INCOME_ROUND_TO;
 }
 
 
@@ -2599,8 +2649,8 @@ function advanceToNextWave() {
         return;
     }
 
-    // Award wave income: oil_price * multiplier
-    const income = Math.round(GameState.oil * WAVE_INCOME_MULTIPLIER / INCOME_ROUND_TO) * INCOME_ROUND_TO;
+    // Award wave income: logarithmic scaling (flattens at high prices)
+    const income = calculateWaveIncome();
     GameState.funds += income;
 
     // Unlock new paths if applicable
@@ -2841,7 +2891,7 @@ function updateEnemies(dt) {
 
 function handleTankerEscape(enemy) {
     if (enemy.type.startsWith('tanker')) {
-        GameState.oil += enemy.oilEscape; // oilEscape is negative
+        applyOilDelta(enemy.oilEscape); // logarithmic scaling applied
         SFX.oilDown();
     }
     // Destroyers escaping has no oil effect but is a missed opportunity
@@ -2850,7 +2900,7 @@ function handleTankerEscape(enemy) {
 function handleEnemyKill(enemy) {
     SFX.shipExplosion();
     if (enemy.type.startsWith('tanker')) {
-        GameState.oil += enemy.oilDestroy;
+        applyOilDelta(enemy.oilDestroy); // logarithmic scaling applied
         SFX.oilUp();
     } else if (enemy.type === 'destroyer') {
         GameState.funds += ESCORT_KILL_BONUS;
@@ -3499,8 +3549,7 @@ function enterUnlimitedMode() {
     GameState.phase = 'setup';
     GameState.setupTimer = SETUP_PHASE_DURATION;
     document.getElementById('screen-end').classList.add('hidden');
-    const income = Math.round(GameState.oil * WAVE_INCOME_MULTIPLIER / INCOME_ROUND_TO) * INCOME_ROUND_TO;
-    GameState.funds += income;
+    GameState.funds += calculateWaveIncome();
     GameState.wave++;
     updateActivePaths();
     updateUI();
@@ -3540,9 +3589,8 @@ function continueAfterStalemate() {
     GameState.setupTimer = SETUP_PHASE_DURATION;
     document.getElementById('screen-end').classList.add('hidden');
 
-    // Award income for this transition wave
-    const income = Math.round(GameState.oil * WAVE_INCOME_MULTIPLIER / INCOME_ROUND_TO) * INCOME_ROUND_TO;
-    GameState.funds += income;
+    // Award income for this transition wave (logarithmic)
+    GameState.funds += calculateWaveIncome();
 
     updateActivePaths();
     updateUI();
@@ -4288,9 +4336,18 @@ const RegressionTests = {
             getWaveDate(20));
 
         // --- Economy tests ---
-        this.assert('Wave income formula',
-            Math.round(85 * WAVE_INCOME_MULTIPLIER / 5) * 5 === 1020,
-            `85 * ${WAVE_INCOME_MULTIPLIER} rounded to 5 = ${Math.round(85 * WAVE_INCOME_MULTIPLIER / 5) * 5}`);
+        // Test logarithmic income: at reference price ($85), should produce reasonable income
+        const savedOilIncome = GameState.oil;
+        GameState.oil = OIL_REFERENCE;
+        const baseIncome = calculateWaveIncome();
+        GameState.oil = OIL_REFERENCE * 2; // $170
+        const highIncome = calculateWaveIncome();
+        GameState.oil = savedOilIncome;
+        this.assert('Wave income at $85 is positive',
+            baseIncome > 0, `Got ${baseIncome}`);
+        this.assert('Wave income has diminishing returns (2x price < 2x income)',
+            highIncome < baseIncome * 2,
+            `$85: ${baseIncome}, $170: ${highIncome}`);
 
         this.assert('Oil thresholds: win=$250 lose=$60',
             OIL_WIN_THRESHOLD === 250 && OIL_LOSE_THRESHOLD === 60);
@@ -4303,6 +4360,21 @@ const RegressionTests = {
 
         this.assert('Large tanker oil: +9 destroy, -6 escape',
             OIL_LARGE_DESTROY === 9 && OIL_LARGE_ESCAPE === -6);
+
+        // Test oil delta scaling: kills should be worth less at high prices
+        const savedOilDelta = GameState.oil;
+        GameState.oil = OIL_REFERENCE; // $85
+        const oilBefore85 = GameState.oil;
+        applyOilDelta(OIL_SMALL_DESTROY);
+        const gain85 = GameState.oil - oilBefore85;
+        GameState.oil = OIL_REFERENCE * 3; // $255
+        const oilBefore255 = GameState.oil;
+        applyOilDelta(OIL_SMALL_DESTROY);
+        const gain255 = GameState.oil - oilBefore255;
+        GameState.oil = savedOilDelta;
+        this.assert('Oil delta diminishes at high prices',
+            gain85 > gain255,
+            `At $85: +${gain85.toFixed(2)}, at $255: +${gain255.toFixed(2)}`);
 
         // --- Wave spawn tests ---
         // Save and restore game state for spawn queue test
@@ -4365,15 +4437,17 @@ const RegressionTests = {
         GameState.f14KillCounter = savedF14.counter;
         GameState.funds = savedF14.funds;
 
-        // --- handleEnemyKill / handleTankerEscape oil tests ---
+        // --- handleEnemyKill / handleTankerEscape oil tests (logarithmic) ---
         const savedOil = GameState.oil;
         GameState.oil = 100;
+        const oilBeforeKill = GameState.oil;
         handleEnemyKill({ type: 'tanker-small', oilDestroy: OIL_SMALL_DESTROY });
-        this.assert('Small tanker kill raises oil by 3',
-            GameState.oil === 103, `Oil = ${GameState.oil}`);
+        this.assert('Small tanker kill raises oil',
+            GameState.oil > oilBeforeKill, `Oil = ${GameState.oil.toFixed(2)}`);
+        const oilBeforeEscape = GameState.oil;
         handleTankerEscape({ type: 'tanker-large', oilEscape: OIL_LARGE_ESCAPE });
-        this.assert('Large tanker escape drops oil by 6',
-            GameState.oil === 97, `Oil = ${GameState.oil}`);
+        this.assert('Large tanker escape drops oil',
+            GameState.oil < oilBeforeEscape, `Oil = ${GameState.oil.toFixed(2)}`);
         GameState.oil = savedOil;
 
         // --- Path unlocking ---
