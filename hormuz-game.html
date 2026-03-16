@@ -968,6 +968,18 @@ const UNIT_CLICK_RADIUS = 30;            // px — click/hover detection radius 
 const COAST_WATER_MARGIN = 60;           // px — how close to water for coast placement
 const PATROL_LAND_SKIP_ANGLE = 0.2;      // radians — skip ahead when patrol hits land
 
+// --- DRONE DEFAULTS ---
+const DRONE_MAX_STRIKES = 5;             // base strikes before depletion
+const DRONE_SPLASH_RADIUS = 40;          // px — splash radius on drone attack
+const DRONE_STRIKES_T1 = 7;             // strikes after Tier 1 upgrade
+const DRONE_STRIKES_T2 = 10;            // strikes after Tier 2 upgrade
+
+// --- MINE LAYER DEFAULTS ---
+const MINE_LAYER_MAX_MINES = 4;          // base max active mines per layer
+const MINE_LAYER_MAX_MINES_T2 = 6;      // max mines after Dense Field upgrade
+const MINE_SPLASH_RADIUS = 50;           // px — mine detonation splash radius
+const MINE_RESPAWN_TIME = 12;            // seconds before detonated mine respawns
+
 // --- UPGRADE SPECIAL MULTIPLIERS ---
 const UPGRADE_DUAL_TARGET_CD = 0.7;      // cooldown multiplier for dual-target special
 const UPGRADE_FAST_RESPAWN_CD = 0.6;     // cooldown multiplier for mine fast-respawn
@@ -1086,8 +1098,8 @@ const UNIT_DEFS = [
         evasion: EVASION_LOW,
         targets: ['tanker', 'destroyer'],   // never air
         attritable: true,
-        maxStrikes: 5,
-        splashRadius: 40,
+        maxStrikes: DRONE_MAX_STRIKES,
+        splashRadius: DRONE_SPLASH_RADIUS,
         upgrades: [
             { name: 'Extended Swarm', costMult: 1.4, rangeBoost: 0, dpsBoost: 0.15, hpBoost: 0, special: 'strikes-7' },
             { name: 'Heavy Swarm', costMult: 1.4, rangeBoost: 0.10, dpsBoost: 0.25, hpBoost: 0, special: 'strikes-10' }
@@ -1107,9 +1119,9 @@ const UNIT_DEFS = [
         signature: 'medium',
         evasion: EVASION_MEDIUM,
         targets: ['tanker', 'destroyer'],
-        maxMines: 4,
-        mineSplashRadius: 50,
-        mineRespawnTime: 12,
+        maxMines: MINE_LAYER_MAX_MINES,
+        mineSplashRadius: MINE_SPLASH_RADIUS,
+        mineRespawnTime: MINE_RESPAWN_TIME,
         upgrades: [
             { name: 'Heavy Mines', costMult: 1.4, rangeBoost: 0, dpsBoost: 0.60, hpBoost: 0, special: 'fast-respawn' },
             { name: 'Dense Field', costMult: 1.4, rangeBoost: 0.15, dpsBoost: 0, hpBoost: 0, special: 'mines-6' }
@@ -1845,17 +1857,17 @@ function upgradeUnit(unit) {
                 unit.splashRadius = UPGRADE_SPLASH_RADIUS;
                 break;
             case 'strikes-7':
-                unit.strikesRemaining = Math.max(unit.strikesRemaining, 7);
+                unit.strikesRemaining = Math.max(unit.strikesRemaining, DRONE_STRIKES_T1);
                 break;
             case 'strikes-10':
-                unit.strikesRemaining = Math.max(unit.strikesRemaining, 10);
+                unit.strikesRemaining = Math.max(unit.strikesRemaining, DRONE_STRIKES_T2);
                 break;
             case 'fast-respawn':
                 // Reduce mine respawn time (handled via mine layer's cooldown)
                 unit.cooldown *= UPGRADE_FAST_RESPAWN_CD;
                 break;
             case 'mines-6':
-                unit.maxMines = 6;
+                unit.maxMines = MINE_LAYER_MAX_MINES_T2;
                 break;
             case 'speed-boost':
                 unit.patrolSpeed *= UPGRADE_SPEED_BOOST;
