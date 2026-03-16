@@ -785,6 +785,7 @@
    §4   DOM REFERENCES           — cached element lookups
    §5   VIEWPORT / PAN / ZOOM    — camera, mouse drag, scroll zoom
    §6   COORDINATE HELPERS       — screen↔world, land/water hit-tests
+   §6b  PERFORMANCE CACHES       — pre-computed land grid, path cache
    §7   DATE FORMATTING          — wave-to-calendar conversion
    §8   UI UPDATE                — HUD, sidebar, phase indicator
    §9   UNIT SELECTION/PLACEMENT — buy, place, upgrade, cycle
@@ -806,7 +807,7 @@
     ├ §15i DRAWING: PLAYER UNITS — 6 unit sprites + selection UI
     └ §15j DRAWING: FX           — projectiles, mines, missiles, effects
    §16  INITIALIZATION           — startGame, init, event wiring
-   §17  REGRESSION TESTS         — 100 automated checks (Ctrl+T)
+   §17  REGRESSION TESTS         — 108 automated checks (Ctrl+T)
 
    ARCHITECTURE NOTES:
    - Single-file HTML/CSS/JS, no dependencies, portable
@@ -982,6 +983,10 @@ const OFFSCREEN_SPAWN_MARGIN = 50;       // px — how far off-screen cruise mis
 
 // --- MINE PLACEMENT ---
 const MINE_LANE_SAMPLE_STEP = 100;       // px — path sampling interval for lane proximity checks
+
+// --- PERFORMANCE ---
+const LAND_GRID_CELL = 8;               // px — resolution of pre-computed land/water grid (lower = more accurate, more memory)
+const PATH_CACHE_STEP = 2;              // px — distance between cached points on shipping lane paths
 
 // --- VISUAL EFFECTS ---
 const EFFECT_DT_APPROX = 0.016;         // ~60fps assumed frame time for effect aging (draw phase lacks dt)
@@ -1408,6 +1413,96 @@ function isValidWaterPlacement(x, y) {
     return isPointInWater(x, y);
 }
 
+
+/* ---------------------------------------------------------------
+   SECTION 6b: PERFORMANCE CACHES
+   Pre-computed spatial data built once at init to avoid expensive
+   SVG DOM queries (isPointInFill, getPointAtLength) during gameplay.
+   --------------------------------------------------------------- */
+
+/**
+ * Land/water bitmap grid — built once at init.
+ * Each cell stores: 0 = water, 1 = Iran, 2 = Arabia, 3 = island.
+ * Used by isPointInWaterFast() for per-frame checks (FAB patrol, mine placement).
+ * Placement validation still uses precise SVG for accuracy on user click.
+ */
+let landGrid = null;
+let landGridCols = 0;
+let landGridRows = 0;
+
+function buildLandGrid() {
+    landGridCols = Math.ceil(MAP_WIDTH / LAND_GRID_CELL);
+    landGridRows = Math.ceil(MAP_HEIGHT / LAND_GRID_CELL);
+    landGrid = new Uint8Array(landGridCols * landGridRows);
+
+    const pt = svgEl.createSVGPoint();
+    for (let row = 0; row < landGridRows; row++) {
+        pt.y = row * LAND_GRID_CELL + LAND_GRID_CELL / 2;
+        for (let col = 0; col < landGridCols; col++) {
+            pt.x = col * LAND_GRID_CELL + LAND_GRID_CELL / 2;
+            if (iranCoast.isPointInFill(pt)) {
+                landGrid[row * landGridCols + col] = 1;
+            } else if (arabiaCoast.isPointInFill(pt)) {
+                landGrid[row * landGridCols + col] = 2;
+            } else {
+                for (const island of islandElements) {
+                    if (island.isPointInFill(pt)) {
+                        landGrid[row * landGridCols + col] = 3;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Fast grid-based water check — O(1) lookup, used for per-frame game logic */
+function isPointInWaterFast(x, y) {
+    const col = Math.floor(x / LAND_GRID_CELL);
+    const row = Math.floor(y / LAND_GRID_CELL);
+    if (col < 0 || col >= landGridCols || row < 0 || row >= landGridRows) return true;
+    return landGrid[row * landGridCols + col] === 0;
+}
+
+/**
+ * Shipping lane path cache — pre-sampled positions along each SVG path.
+ * Each cache entry is a Float32Array of [x0, y0, x1, y1, ...] pairs at
+ * PATH_CACHE_STEP intervals. Enemy position lookup uses linear interpolation
+ * between the two nearest cached points instead of calling getPointAtLength().
+ */
+const pathCache = {};
+
+function buildPathCaches() {
+    for (const [pathId, pathEl] of Object.entries(lanePaths)) {
+        if (!pathEl) continue;
+        const totalLen = pathEl.getTotalLength();
+        const numPoints = Math.ceil(totalLen / PATH_CACHE_STEP) + 1;
+        const cache = new Float32Array(numPoints * 2);
+        for (let i = 0; i < numPoints; i++) {
+            const d = Math.min(i * PATH_CACHE_STEP, totalLen);
+            const pt = pathEl.getPointAtLength(d);
+            cache[i * 2] = pt.x;
+            cache[i * 2 + 1] = pt.y;
+        }
+        pathCache[pathId] = { data: cache, totalLength: totalLen, numPoints };
+    }
+}
+
+/** Fast path position lookup — linear interpolation between cached points */
+function getPathPosition(pathId, dist) {
+    const c = pathCache[pathId];
+    if (!c) return { x: 0, y: 0 };
+    const t = dist / PATH_CACHE_STEP;
+    const i0 = Math.min(Math.floor(t), c.numPoints - 2);
+    const frac = t - i0;
+    const idx = i0 * 2;
+    return {
+        x: c.data[idx] + (c.data[idx + 2] - c.data[idx]) * frac,
+        y: c.data[idx + 1] + (c.data[idx + 3] - c.data[idx + 1]) * frac
+    };
+}
+
+
 /**
  * Validate placement for a given unit definition at world coordinates.
  * Returns { valid: boolean, reason: string }
@@ -1460,48 +1555,77 @@ function getWaveDate(waveNumber) {
    SECTION 8: UI UPDATE
    ==================================================================== */
 
+// Cache previous UI values to avoid redundant DOM writes
+const _uiCache = { oil: -1, oilColor: '', funds: -1, wave: -1, stalemate: false,
+                    f14: -1, phase: '', setupTimer: -1, date: '' };
+
 function updateUI() {
-    // Oil price — color shifts based on value
+    // Oil price — only update if value or color changed
     const oilColor = GameState.oil >= OIL_COLOR_GREEN ? '#33ff33' :
                      GameState.oil >= OIL_COLOR_CYAN  ? '#00ffff' :
                      GameState.oil >= OIL_COLOR_AMBER ? '#ffaa00' : '#ff3333';
-    uiOilPrice.innerText = `$${GameState.oil.toFixed(2)}`;
-    uiOilPrice.style.color = oilColor;
-    uiOilPrice.style.textShadow = `0 0 10px ${oilColor}`;
+    const oilRound = Math.round(GameState.oil * 100); // compare to 2 decimal places
+    if (_uiCache.oil !== oilRound) {
+        _uiCache.oil = oilRound;
+        uiOilPrice.innerText = `$${GameState.oil.toFixed(2)}`;
+    }
+    if (_uiCache.oilColor !== oilColor) {
+        _uiCache.oilColor = oilColor;
+        uiOilPrice.style.color = oilColor;
+        uiOilPrice.style.textShadow = `0 0 10px ${oilColor}`;
+    }
 
-    // Funds, wave, date
-    uiFunds.innerText = Math.round(GameState.funds);
-    uiWave.innerText = `${GameState.wave} / ${GameState.passedStalemate ? '∞' : STALEMATE_WAVE}`;
-    uiDate.innerText = getWaveDate(GameState.wave);
+    // Funds
+    const fundsRound = Math.round(GameState.funds);
+    if (_uiCache.funds !== fundsRound) {
+        _uiCache.funds = fundsRound;
+        uiFunds.innerText = fundsRound;
+    }
 
-    // F-14
-    uiF14.innerText = GameState.f14Charges;
-    uiF14Max.innerText = F14_MAX_CHARGES;
+    // Wave / date — only changes between waves
+    if (_uiCache.wave !== GameState.wave || _uiCache.stalemate !== GameState.passedStalemate) {
+        _uiCache.wave = GameState.wave;
+        _uiCache.stalemate = GameState.passedStalemate;
+        uiWave.innerText = `${GameState.wave} / ${GameState.passedStalemate ? '∞' : STALEMATE_WAVE}`;
+        uiDate.innerText = getWaveDate(GameState.wave);
+    }
 
-    // Phase
-    switch (GameState.phase) {
-        case 'setup':
-            hudPhase.innerText = `SETUP PHASE — ${Math.ceil(GameState.setupTimer)}s`;
-            uiStatus.innerText = 'DEPLOYING_ASSETS';
-            break;
-        case 'defend':
-            hudPhase.innerText = `DEFEND — WAVE ${GameState.wave}`;
-            uiStatus.innerText = 'ENGAGED';
-            break;
-        case 'waveEnd':
-            hudPhase.innerText = 'WAVE COMPLETE';
-            uiStatus.innerText = 'ASSESSING';
-            break;
-        case 'paused':
-            hudPhase.innerText = 'SYSTEM PAUSED';
-            break;
-        case 'victory':
-        case 'defeat':
-        case 'stalemate':
-            hudPhase.innerText = '';
-            break;
-        default:
-            hudPhase.innerText = 'INITIALIZING...';
+    // F-14 — charges rarely change
+    if (_uiCache.f14 !== GameState.f14Charges) {
+        _uiCache.f14 = GameState.f14Charges;
+        uiF14.innerText = GameState.f14Charges;
+        uiF14Max.innerText = F14_MAX_CHARGES;
+    }
+
+    // Phase — includes timer for setup
+    const timerKey = GameState.phase === 'setup' ? Math.ceil(GameState.setupTimer) : -1;
+    if (_uiCache.phase !== GameState.phase || _uiCache.setupTimer !== timerKey) {
+        _uiCache.phase = GameState.phase;
+        _uiCache.setupTimer = timerKey;
+        switch (GameState.phase) {
+            case 'setup':
+                hudPhase.innerText = `SETUP PHASE — ${timerKey}s`;
+                uiStatus.innerText = 'DEPLOYING_ASSETS';
+                break;
+            case 'defend':
+                hudPhase.innerText = `DEFEND — WAVE ${GameState.wave}`;
+                uiStatus.innerText = 'ENGAGED';
+                break;
+            case 'waveEnd':
+                hudPhase.innerText = 'WAVE COMPLETE';
+                uiStatus.innerText = 'ASSESSING';
+                break;
+            case 'paused':
+                hudPhase.innerText = 'SYSTEM PAUSED';
+                break;
+            case 'victory':
+            case 'defeat':
+            case 'stalemate':
+                hudPhase.innerText = '';
+                break;
+            default:
+                hudPhase.innerText = 'INITIALIZING...';
+        }
     }
 
     // Sidebar unit cards
@@ -2620,12 +2744,9 @@ function spawnEnemy(entry) {
         return;
     }
 
-    // Ship-type enemies follow a path
-    const pathEl = lanePaths[entry.pathId];
-    if (!pathEl) return;
-
-    const totalLength = pathEl.getTotalLength();
-    const startPt = pathEl.getPointAtLength(0);
+    // Ship-type enemies follow a path (using cached path data)
+    const c = pathCache[entry.pathId];
+    if (!c) return;
 
     Entities.enemies.push({
         type: entry.type,
@@ -2634,9 +2755,9 @@ function spawnEnemy(entry) {
         hpMax: entry.hp,
         speed: entry.speed,
         dist: 0,                    // distance along path
-        totalLength: totalLength,
-        x: startPt.x,
-        y: startPt.y,
+        totalLength: c.totalLength,
+        x: c.data[0],              // start position from cache
+        y: c.data[1],
         oilDestroy: entry.oilDestroy || 0,
         oilEscape: entry.oilEscape || 0,
         cooldownTimer: 0,
@@ -2697,9 +2818,8 @@ function updateEnemies(dt) {
             continue;
         }
 
-        // Ship-type: follow path
-        const pathEl = lanePaths[enemy.pathId];
-        if (!pathEl) continue;
+        // Ship-type: follow path (using cached path positions)
+        if (!pathCache[enemy.pathId]) continue;
 
         enemy.dist += enemy.speed * dt;
 
@@ -2710,7 +2830,7 @@ function updateEnemies(dt) {
             continue;
         }
 
-        const pt = pathEl.getPointAtLength(enemy.dist);
+        const pt = getPathPosition(enemy.pathId, enemy.dist);
         enemy.x = pt.x;
         enemy.y = pt.y;
 
@@ -2785,44 +2905,41 @@ function updatePlayerUnits(dt) {
  * Returns the closest enemy of the highest-priority type within range.
  */
 function findTarget(unit) {
+    const ux = unit.x, uy = unit.y;
+    const range2 = unit.range * unit.range;
+
     // SAMs prioritize cruise missiles if they have anti-missile capability
     if (unit.antiMissile && Entities.cruiseMissiles.length > 0) {
-        const inRange = Entities.cruiseMissiles.filter(m =>
-            Math.hypot(m.x - unit.x, m.y - unit.y) < unit.range
-        );
-        if (inRange.length > 0) {
-            return inRange.reduce((closest, m) =>
-                Math.hypot(m.x - unit.x, m.y - unit.y) < Math.hypot(closest.x - unit.x, closest.y - unit.y) ? m : closest
-            );
+        let closest = null, closestD2 = Infinity;
+        for (const m of Entities.cruiseMissiles) {
+            const dx = m.x - ux, dy = m.y - uy;
+            const d2 = dx * dx + dy * dy;
+            if (d2 < range2 && d2 < closestD2) {
+                closest = m; closestD2 = d2;
+            }
         }
+        if (closest) return closest;
     }
 
-    // Check target priority list
+    // Check target priority list — find closest matching enemy per priority type
     for (const targetType of unit.targets) {
-        const candidates = Entities.enemies.filter(e => {
-            if (!e.alive) return false;
-            if (Math.hypot(e.x - unit.x, e.y - unit.y) > unit.range) return false;
+        let best = null, bestD2 = Infinity;
+        for (const e of Entities.enemies) {
+            if (!e.alive) continue;
+            // Type match check (inline to avoid closure/function overhead)
+            let match = false;
+            if (targetType === 'tanker') match = e.type.startsWith('tanker');
+            else if (targetType === 'destroyer') match = e.type === 'destroyer';
+            else if (targetType === 'f35') match = e.type === 'f35';
+            if (!match) continue;
 
-            switch (targetType) {
-                case 'tanker':
-                    return e.type.startsWith('tanker');
-                case 'destroyer':
-                    return e.type === 'destroyer';
-                case 'f35':
-                    return e.type === 'f35';
-                case 'cruise_missile':
-                    return false; // handled above via antiMissile path
-                default:
-                    return false;
+            const dx = e.x - ux, dy = e.y - uy;
+            const d2 = dx * dx + dy * dy;
+            if (d2 < range2 && d2 < bestD2) {
+                best = e; bestD2 = d2;
             }
-        });
-
-        if (candidates.length > 0) {
-            // Return closest candidate
-            return candidates.reduce((closest, c) =>
-                Math.hypot(c.x - unit.x, c.y - unit.y) < Math.hypot(closest.x - unit.x, closest.y - unit.y) ? c : closest
-            );
         }
+        if (best) return best;
     }
 
     return null;
@@ -2881,12 +2998,14 @@ function updateProjectiles(dt) {
 
                 // Splash damage
                 if (p.isSplash && p.splashRadius > 0) {
-                    Entities.enemies.forEach(e => {
-                        if (e === t || !e.alive) return;
-                        if (Math.hypot(e.x - t.x, e.y - t.y) < p.splashRadius) {
+                    const sr2 = p.splashRadius * p.splashRadius;
+                    for (const e of Entities.enemies) {
+                        if (e === t || !e.alive) continue;
+                        const sdx = e.x - t.x, sdy = e.y - t.y;
+                        if (sdx * sdx + sdy * sdy < sr2) {
                             e.hp -= p.dmg * SPLASH_DAMAGE_FRACTION;
                         }
-                    });
+                    }
                     spawnEffect(t.x, t.y, '#ff6600', p.splashRadius, 0.5);
                 } else {
                     spawnEffect(t.x, t.y, '#ffffff', 10, 0.3);
@@ -2954,31 +3073,31 @@ function updateEnemyCombat(enemy, dt) {
     const cd = enemy.type === 'destroyer' ? DESTROYER_COOLDOWN : F35_COOLDOWN;
 
     // Find target — prioritize mobile units (drones, FABs) for both types
-    const priorityOrder = ['low', 'medium', 'heavy']; // low signature = mobile = priority
+    // Signature priority: low > medium > heavy (> stealth for destroyers only)
+    const ex = enemy.x, ey = enemy.y;
+    const range2 = range * range;
+    const isF35 = enemy.type === 'f35';
     let target = null;
+    let bestD2 = Infinity;
+    let bestPriority = 4; // lower = higher priority
 
-    for (const sig of priorityOrder) {
-        const candidates = Entities.playerUnits.filter(u =>
-            u.hp > 0 && u.signature === sig &&
-            Math.hypot(u.x - enemy.x, u.y - enemy.y) < range &&
-            !(enemy.type === 'f35' && u.signature === 'stealth') // F-35s can't target subs
-        );
-        if (candidates.length > 0) {
-            target = candidates.reduce((c, u) =>
-                Math.hypot(u.x - enemy.x, u.y - enemy.y) < Math.hypot(c.x - enemy.x, c.y - enemy.y) ? u : c
-            );
-            break;
-        }
-    }
+    for (const u of Entities.playerUnits) {
+        if (u.hp <= 0) continue;
+        if (isF35 && u.signature === 'stealth') continue; // F-35s can't target subs
+        const dx = u.x - ex, dy = u.y - ey;
+        const d2 = dx * dx + dy * dy;
+        if (d2 >= range2) continue;
 
-    // Also check stealth for destroyers (they can target subs)
-    if (!target && enemy.type === 'destroyer') {
-        const subs = Entities.playerUnits.filter(u =>
-            u.hp > 0 && u.signature === 'stealth' &&
-            Math.hypot(u.x - enemy.x, u.y - enemy.y) < range
-        );
-        if (subs.length > 0) {
-            target = subs[0];
+        // Map signature to priority (lower = preferred)
+        let pri;
+        if (u.signature === 'low') pri = 0;
+        else if (u.signature === 'medium') pri = 1;
+        else if (u.signature === 'heavy') pri = 2;
+        else if (u.signature === 'stealth') pri = 3; // destroyers only reach here
+        else continue;
+
+        if (pri < bestPriority || (pri === bestPriority && d2 < bestD2)) {
+            target = u; bestD2 = d2; bestPriority = pri;
         }
     }
 
@@ -3115,8 +3234,8 @@ function updateFABPatrol(dt) {
         const desiredX = unit.originX + unit.patrolRadius * Math.cos(unit.patrolAngle);
         const desiredY = unit.originY + unit.patrolRadius * Math.sin(unit.patrolAngle);
 
-        // Land collision check: only move if destination is water
-        if (isPointInWater(desiredX, desiredY)) {
+        // Land collision check: only move if destination is water (fast grid lookup)
+        if (isPointInWaterFast(desiredX, desiredY)) {
             unit.x = desiredX;
             unit.y = desiredY;
         } else {
@@ -3136,9 +3255,10 @@ function updateMineLayers(dt) {
         if (unit.hp <= 0) continue;
         if (unit.defId !== 3) continue; // Only mine layers
 
-        // Count active mines belonging to this layer
-        const myMines = Entities.mines.filter(m => m.ownerUnit === unit && m.active);
-        unit.activeMines = myMines.length;
+        // Count active mines belonging to this layer (loop to avoid allocation)
+        let mineCount = 0;
+        for (const m of Entities.mines) { if (m.ownerUnit === unit && m.active) mineCount++; }
+        unit.activeMines = mineCount;
 
         // Place new mines if below max and cooldown expired
         if (unit.activeMines < unit.maxMines && unit.cooldownTimer <= 0) {
@@ -3156,18 +3276,20 @@ function placeMine(mineLayer) {
         const mx = mineLayer.x + Math.cos(angle) * dist;
         const my = mineLayer.y + Math.sin(angle) * dist;
 
-        // Must be in water
-        if (!isPointInWater(mx, my)) continue;
+        // Must be in water (fast grid lookup)
+        if (!isPointInWaterFast(mx, my)) continue;
 
-        // Must be reasonably close to a shipping lane (within ~150px)
+        // Must be reasonably close to a shipping lane (using cached path positions)
         let nearLane = false;
+        const laneR2 = MINE_LANE_PROXIMITY * MINE_LANE_PROXIMITY;
         for (const pathId of GameState.activePaths) {
-            const path = lanePaths[pathId];
-            if (!path) continue;
-            const totalLen = path.getTotalLength();
-            for (let t = 0; t < totalLen; t += MINE_LANE_SAMPLE_STEP) {
-                const pt = path.getPointAtLength(t);
-                if (Math.hypot(pt.x - mx, pt.y - my) < MINE_LANE_PROXIMITY) {
+            const c = pathCache[pathId];
+            if (!c) continue;
+            // Sample every ~MINE_LANE_SAMPLE_STEP px along cached path
+            const step = Math.max(1, Math.round(MINE_LANE_SAMPLE_STEP / PATH_CACHE_STEP));
+            for (let j = 0; j < c.numPoints; j += step) {
+                const pdx = c.data[j * 2] - mx, pdy = c.data[j * 2 + 1] - my;
+                if (pdx * pdx + pdy * pdy < laneR2) {
                     nearLane = true;
                     break;
                 }
@@ -3292,29 +3414,36 @@ function updateMines(dt) {
 
         // Check proximity to any enemy ship (not aircraft)
         for (const enemy of Entities.enemies) {
-            if (!enemy.alive) continue;
-            if (enemy.type === 'f35') continue; // Mines don't affect aircraft
+            if (!enemy.alive || enemy.type === 'f35') continue;
 
-            if (Math.hypot(enemy.x - mine.x, enemy.y - mine.y) < MINE_DETONATION_RADIUS) {
-                // DETONATE!
+            const dx = enemy.x - mine.x, dy = enemy.y - mine.y;
+            if (dx * dx + dy * dy < MINE_DETONATION_RADIUS * MINE_DETONATION_RADIUS) {
+                // DETONATE! Apply direct damage + splash in single pass
                 SFX.mineDetonate();
                 enemy.hp -= mine.damage;
                 spawnEffect(mine.x, mine.y, '#ff6600', mine.splashRadius, 0.8);
 
-                // Splash damage to nearby enemies
+                const splashR2 = mine.splashRadius * mine.splashRadius;
                 for (const other of Entities.enemies) {
                     if (other === enemy || !other.alive || other.type === 'f35') continue;
-                    if (Math.hypot(other.x - mine.x, other.y - mine.y) < mine.splashRadius) {
+                    const sx = other.x - mine.x, sy = other.y - mine.y;
+                    if (sx * sx + sy * sy < splashR2) {
                         other.hp -= mine.damage * SPLASH_DAMAGE_FRACTION;
                     }
+                    // Check kills inline (covers both direct hit and splash victims)
                 }
 
-                // Check kills
-                for (const enemy2 of Entities.enemies) {
-                    if (enemy2.hp <= 0 && enemy2.alive) {
-                        enemy2.alive = false;
-                        handleEnemyKill(enemy2);
-                        spawnEffect(enemy2.x, enemy2.y, '#ff3333', 30, 0.8);
+                // Single kill check pass for all damaged enemies
+                if (enemy.hp <= 0 && enemy.alive) {
+                    enemy.alive = false;
+                    handleEnemyKill(enemy);
+                    spawnEffect(enemy.x, enemy.y, '#ff3333', 30, 0.8);
+                }
+                for (const other of Entities.enemies) {
+                    if (other.hp <= 0 && other.alive) {
+                        other.alive = false;
+                        handleEnemyKill(other);
+                        spawnEffect(other.x, other.y, '#ff3333', 30, 0.8);
                     }
                 }
 
@@ -3328,8 +3457,13 @@ function updateMines(dt) {
 }
 
 function removeDeadEntities() {
-    Entities.enemies = Entities.enemies.filter(e => e.alive);
-    Entities.playerUnits = Entities.playerUnits.filter(u => u.hp > 0);
+    // In-place removal to avoid allocating new arrays every frame
+    for (let i = Entities.enemies.length - 1; i >= 0; i--) {
+        if (!Entities.enemies[i].alive) Entities.enemies.splice(i, 1);
+    }
+    for (let i = Entities.playerUnits.length - 1; i >= 0; i--) {
+        if (Entities.playerUnits[i].hp <= 0) Entities.playerUnits.splice(i, 1);
+    }
     // Projectiles, missiles cleaned up in their respective update functions
 }
 
@@ -4021,6 +4155,10 @@ function startGame() {
 }
 
 function init() {
+    // Build performance caches (one-time cost at startup)
+    buildLandGrid();
+    buildPathCaches();
+
     updateViewportTransform();
 
     // Wire up intro button
@@ -4429,6 +4567,28 @@ const RegressionTests = {
         // --- Mine lane sampling ---
         this.assert('Mine lane sample step defined',
             MINE_LANE_SAMPLE_STEP === 100);
+
+        // --- Performance caches ---
+        this.assert('Land grid built',
+            landGrid !== null && landGrid.length > 0);
+        this.assert('Land grid dimensions match map',
+            landGridCols === Math.ceil(MAP_WIDTH / LAND_GRID_CELL) &&
+            landGridRows === Math.ceil(MAP_HEIGHT / LAND_GRID_CELL));
+        this.assert('isPointInWaterFast agrees with isPointInWater for water point',
+            isPointInWaterFast(1200, 750) === isPointInWater(1200, 750));
+        this.assert('isPointInWaterFast agrees with isPointInWater for land point',
+            isPointInWaterFast(600, 100) === isPointInWater(600, 100));
+        this.assert('Path cache built for TR-7',
+            pathCache['lane-tr7'] && pathCache['lane-tr7'].numPoints > 0);
+        this.assert('Path cache built for north lane',
+            pathCache['lane-north'] && pathCache['lane-north'].numPoints > 0);
+        this.assert('Path cache built for south lane',
+            pathCache['lane-south'] && pathCache['lane-south'].numPoints > 0);
+        this.assert('getPathPosition returns valid coords',
+            (() => {
+                const p = getPathPosition('lane-tr7', 100);
+                return typeof p.x === 'number' && typeof p.y === 'number' && !isNaN(p.x);
+            })());
 
         // --- Report ---
         const passed = this.results.filter(r => r.pass).length;
