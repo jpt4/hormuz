@@ -776,12 +776,54 @@
 /* ====================================================================
    W.O.P.R. ENGINE v2.0 — STRAIT OF HORMUZ DEFENSE
    Map geometry canonical from hormuz-map.html v4.9
+
+   TABLE OF CONTENTS (search "SECTION N" to jump):
+   ─────────────────────────────────────────────────
+   §1   TUNABLE CONSTANTS        — all gameplay-affecting numbers
+   §2   GAME STATE               — mutable phase/economy/UI state
+   §3   ENTITY STORAGE           — arrays for all game entities
+   §4   DOM REFERENCES           — cached element lookups
+   §5   VIEWPORT / PAN / ZOOM    — camera, mouse drag, scroll zoom
+   §6   COORDINATE HELPERS       — screen↔world, land/water hit-tests
+   §7   DATE FORMATTING          — wave-to-calendar conversion
+   §8   UI UPDATE                — HUD, sidebar, phase indicator
+   §9   UNIT SELECTION/PLACEMENT — buy, place, upgrade, cycle
+   §10  SIDEBAR / REFERENCE      — sliding panels
+   §11  KEYBOARD INPUT           — all keybindings
+   §12  PAUSE                    — pause/unpause toggle
+   §13  F-14 TOMCAT STRIKE       — special ability: sweep attack
+   §13a AUDIO SYSTEM             — Web Audio API, SFX primitives
+   §14  CLOCK                    — real-time UTC display
+   §15  GAME LOOP                — requestAnimationFrame, update/draw
+    ├ §15a PHASE TRANSITIONS     — setup→defend→waveEnd→advance
+    ├ §15b WAVE SPAWN QUEUE      — enemy composition per wave
+    ├ §15c ENEMY SPAWNING        — path-following, F-35 flyby
+    ├ §15d ENTITY UPDATES        — combat, projectiles, missiles
+    ├ §15e WIN / LOSE / STALEMATE— end conditions, unlimited mode
+    ├ §15f HIGH SCORE            — localStorage persistence
+    ├ §15g DRAW DISPATCHER       — render order orchestration
+    ├ §15h DRAWING: ENEMIES      — tanker, destroyer, F-35 sprites
+    ├ §15i DRAWING: PLAYER UNITS — 6 unit sprites + selection UI
+    └ §15j DRAWING: FX           — projectiles, mines, missiles, effects
+   §16  INITIALIZATION           — startGame, init, event wiring
+   §17  REGRESSION TESTS         — 100 automated checks (Ctrl+T)
+
+   ARCHITECTURE NOTES:
+   - Single-file HTML/CSS/JS, no dependencies, portable
+   - SVG layer for map geometry (z-index 2), Canvas for game (z-index 3)
+   - SVG isPointInFill() for land/water hit-testing
+   - SVG getPointAtLength() for enemy path-following
+   - requestAnimationFrame loop with delta-time capping
+   - Phase state machine: intro→setup→defend→waveEnd→(repeat | end)
    ==================================================================== */
 
 /* ====================================================================
    SECTION 1: TUNABLE CONSTANTS
    All gameplay-affecting values are declared here for balance tuning.
-   No magic numbers elsewhere in the code.
+   No magic numbers elsewhere in the code — every numeric literal that
+   affects gameplay or physics is declared here. Audio synthesis
+   parameters (Hz, duration, etc.) live in the SFX object (§13a) as
+   they are sound design, not gameplay values.
    ==================================================================== */
 
 // --- ECONOMY ---
@@ -879,6 +921,85 @@ const F14_MAX_CHARGES = 3;
 const F14_COOLDOWN_SEC = 30;
 const F14_DAMAGE = 500;                  // devastating to destroyers
 const F14_SPEED = 600;                   // px/s sweep across map
+const F14_MISSILES_PER_SWEEP = 6;        // missiles carried per F-14 sortie
+const F14_MISSILE_RANGE = 800;           // px engagement range for F-14 missiles
+const F14_MISSILE_INTERVAL = 0.3;        // seconds between F-14 missile shots
+
+// --- PROJECTILE & COMBAT ---
+const PLAYER_PROJECTILE_SPEED = 800;     // px/s — player projectile travel speed
+const ENEMY_PROJECTILE_SPEED = 550;      // px/s — destroyer/F-35 projectile travel speed
+const PROJECTILE_HIT_RADIUS = 20;        // px — distance at which projectiles score a hit
+const SPLASH_DAMAGE_FRACTION = 0.5;      // splash deals this fraction of direct damage
+const CRUISE_MISSILE_HIT_RADIUS = 25;    // px — cruise missile impact detection
+
+// --- MINE SYSTEM ---
+const MINE_DETONATION_RADIUS = 35;       // px — proximity trigger for mines
+const MINE_LANE_PROXIMITY = 150;         // px — max distance from lane for mine placement
+const MINE_PLACEMENT_ATTEMPTS = 20;      // random attempts to find valid mine position
+const MINE_PLACEMENT_MIN_DIST = 50;      // px — min distance from mine layer for mine
+const USV_SPEED = 180;                   // px/s — unmanned surface vessel speed
+const USV_ARRIVAL_RADIUS = 10;           // px — USV considers itself "arrived" at target
+const USV_HOME_RADIUS = 15;             // px — USV considers itself "home" at mine layer
+
+// --- UNIT INTERACTION ---
+const UNIT_CLICK_RADIUS = 30;            // px — click/hover detection radius for player units
+const COAST_WATER_MARGIN = 60;           // px — how close to water for coast placement
+const PATROL_LAND_SKIP_ANGLE = 0.2;      // radians — skip ahead when patrol hits land
+
+// --- UPGRADE SPECIAL MULTIPLIERS ---
+const UPGRADE_DUAL_TARGET_CD = 0.7;      // cooldown multiplier for dual-target special
+const UPGRADE_FAST_RESPAWN_CD = 0.6;     // cooldown multiplier for mine fast-respawn
+const UPGRADE_DUAL_TORPEDO_CD = 0.65;    // cooldown multiplier for dual-torpedo special
+const UPGRADE_TORPEDO_BURST_DPS = 1.3;   // dps multiplier for torpedo-burst (on top of dpsBoost)
+const UPGRADE_SPEED_BOOST = 1.5;         // patrol speed multiplier for speed-boost special
+const UPGRADE_SPLASH_RADIUS = 60;        // px — splash radius granted by splash upgrade
+
+// --- OIL PRICE UI THRESHOLDS ---
+const OIL_COLOR_GREEN = 150;             // oil >= this shows green (winning)
+const OIL_COLOR_CYAN = 100;              // oil >= this shows cyan (healthy)
+const OIL_COLOR_AMBER = 75;              // oil >= this shows amber (warning); below = red
+
+// --- F-35 SPAWN / DESPAWN BOUNDS ---
+const F35_SPAWN_X_LEFT = -50;            // px — spawn X for left-entry F-35s
+const F35_SPAWN_X_RIGHT = 2450;          // px — spawn X for right-entry F-35s
+const F35_SPAWN_Y_MIN = 100;             // px — minimum spawn Y for F-35s
+const F35_SPAWN_Y_RANGE = 1400;          // px — random Y range added to min
+const F35_DY_SPREAD = 0.3;              // vertical drift coefficient for F-35 flight
+const F35_DESPAWN_MARGIN = 100;          // px — distance past map edge before F-35 removal
+const F35_DESPAWN_X_MAX = 2500;          // px — right-side despawn threshold
+const F35_DESPAWN_Y_MAX = 1800;          // px — bottom despawn threshold
+
+// --- F-14 SPAWN ---
+const F14_SPAWN_X = -100;               // px — F-14 enters from left off-screen
+const F14_SPAWN_Y_BASE = 400;           // px — minimum Y for F-14 sweep
+const F14_SPAWN_Y_RANGE = 800;          // px — random Y range added to base
+const F14_DESPAWN_X = 2600;             // px — F-14 removed after passing this X
+
+// --- MAP DIMENSIONS ---
+const MAP_WIDTH = 2400;                  // px — world/viewBox width (must match SVG & canvas)
+const MAP_HEIGHT = 1680;                 // px — world/viewBox height (must match SVG & canvas)
+const OFFSCREEN_SPAWN_MARGIN = 50;       // px — how far off-screen cruise missiles spawn
+
+// --- MINE PLACEMENT ---
+const MINE_LANE_SAMPLE_STEP = 100;       // px — path sampling interval for lane proximity checks
+
+// --- VISUAL EFFECTS ---
+const EFFECT_DT_APPROX = 0.016;         // ~60fps assumed frame time for effect aging (draw phase lacks dt)
+
+// --- PHASE TIMING ---
+const WAVE_END_PAUSE = 2.0;              // seconds between wave end and next wave setup
+const INCOME_ROUND_TO = 5;               // wave income rounded to nearest N
+
+// --- VIEWPORT ---
+const PAN_STEP = 40;                     // px — arrow key pan distance per press
+const ZOOM_MIN = 0.2;
+const ZOOM_MAX = 2.0;
+const ZOOM_STEP_IN = 1.1;               // zoom factor per scroll click (in)
+const ZOOM_STEP_OUT = 0.9;              // zoom factor per scroll click (out)
+const INITIAL_PAN_X = -200;
+const INITIAL_PAN_Y = -100;
+const INITIAL_ZOOM = 0.55;
+const DT_CAP = 0.1;                     // max delta-time per frame (seconds), prevents physics jumps
 
 // --- PLAYER UNIT DEFINITIONS ---
 // Each unit: { name, icon, cost, hp, dps, range, cooldown, placement, signature, ... }
@@ -1015,9 +1136,9 @@ const UNIT_DEFS = [
 // Upgrade cost multiplier (each tier multiplies previous cost by this)
 const UPGRADE_COST_MULTIPLIER = 1.4;
 
-// --- FAB PATROL ---
-const FAB_PATROL_RADIUS = 200;
-const FAB_PATROL_SPEED = 120;
+// --- PATROL DEFAULTS (informational — actual values are in UNIT_DEFS) ---
+// FAB: patrolRadius=200, patrolSpeed=120
+// SUB: patrolRadius=160, patrolSpeed=50
 
 // --- AUDIO ---
 const MASTER_VOLUME = 0.4;
@@ -1131,7 +1252,7 @@ const clockEl = document.getElementById('clock');
    SECTION 5: VIEWPORT / PAN / ZOOM
    ==================================================================== */
 
-let panX = -200, panY = -100, zoom = 0.55;
+let panX = INITIAL_PAN_X, panY = INITIAL_PAN_Y, zoom = INITIAL_ZOOM;
 let isPanning = false, panStartX, panStartY;
 
 function updateViewportTransform() {
@@ -1141,8 +1262,8 @@ function updateViewportTransform() {
 // Mouse wheel zoom (focal point under cursor)
 container.addEventListener('wheel', (e) => {
     e.preventDefault();
-    const factor = e.deltaY > 0 ? 0.9 : 1.1;
-    const newZoom = Math.min(Math.max(zoom * factor, 0.2), 2.0);
+    const factor = e.deltaY > 0 ? ZOOM_STEP_OUT : ZOOM_STEP_IN;
+    const newZoom = Math.min(Math.max(zoom * factor, ZOOM_MIN), ZOOM_MAX);
     const mouseX = e.clientX;
     const mouseY = e.clientY;
     panX = mouseX - (mouseX - panX) * (newZoom / zoom);
@@ -1166,7 +1287,7 @@ container.addEventListener('mousedown', (e) => {
     // Check if clicking on an existing unit to select it
     const world = screenToWorld(e.clientX, e.clientY);
     const clickedUnit = Entities.playerUnits.find(u =>
-        u.hp > 0 && Math.hypot(u.x - world.x, u.y - world.y) < 30
+        u.hp > 0 && Math.hypot(u.x - world.x, u.y - world.y) < UNIT_CLICK_RADIUS
     );
     if (clickedUnit) {
         GameState.selectedPlacedUnit = clickedUnit;
@@ -1194,7 +1315,7 @@ window.addEventListener('mousemove', (e) => {
     const world = screenToWorld(e.clientX, e.clientY);
     GameState.hoveredUnit = null;
     for (const u of Entities.playerUnits) {
-        if (u.hp > 0 && Math.hypot(u.x - world.x, u.y - world.y) < 30) {
+        if (u.hp > 0 && Math.hypot(u.x - world.x, u.y - world.y) < UNIT_CLICK_RADIUS) {
             GameState.hoveredUnit = u;
             break;
         }
@@ -1276,8 +1397,8 @@ function isValidLandPlacement(x, y) {
  */
 function isValidCoastPlacement(x, y) {
     if (!isValidLandPlacement(x, y)) return false;
-    // Check if water is nearby (within ~60px in any cardinal direction)
-    const margin = 60;
+    // Check if water is nearby (within margin in any cardinal direction)
+    const margin = COAST_WATER_MARGIN;
     return isPointInWater(x + margin, y) || isPointInWater(x - margin, y) ||
            isPointInWater(x, y + margin) || isPointInWater(x, y - margin);
 }
@@ -1293,7 +1414,7 @@ function isValidWaterPlacement(x, y) {
  */
 function validatePlacement(unitDef, x, y) {
     // Bounds check
-    if (x < 0 || x > 2400 || y < 0 || y > 1680) {
+    if (x < 0 || x > MAP_WIDTH || y < 0 || y > MAP_HEIGHT) {
         return { valid: false, reason: 'OUT OF BOUNDS' };
     }
 
@@ -1341,9 +1462,9 @@ function getWaveDate(waveNumber) {
 
 function updateUI() {
     // Oil price — color shifts based on value
-    const oilColor = GameState.oil >= 150 ? '#33ff33' :
-                     GameState.oil >= 100 ? '#00ffff' :
-                     GameState.oil >= 75  ? '#ffaa00' : '#ff3333';
+    const oilColor = GameState.oil >= OIL_COLOR_GREEN ? '#33ff33' :
+                     GameState.oil >= OIL_COLOR_CYAN  ? '#00ffff' :
+                     GameState.oil >= OIL_COLOR_AMBER ? '#ffaa00' : '#ff3333';
     uiOilPrice.innerText = `$${GameState.oil.toFixed(2)}`;
     uiOilPrice.style.color = oilColor;
     uiOilPrice.style.textShadow = `0 0 10px ${oilColor}`;
@@ -1468,7 +1589,7 @@ function handlePlacement(e) {
 
     // Check if clicking an existing player unit (for selection/upgrade)
     const clickedUnit = Entities.playerUnits.find(u =>
-        u.hp > 0 && Math.hypot(u.x - world.x, u.y - world.y) < 30
+        u.hp > 0 && Math.hypot(u.x - world.x, u.y - world.y) < UNIT_CLICK_RADIUS
     );
 
     if (clickedUnit && GameState.selectedUnitType === -1) {
@@ -1531,13 +1652,13 @@ function upgradeUnit(unit) {
     if (upgrade.special) {
         switch (upgrade.special) {
             case 'dual-target':
-                unit.cooldown *= 0.7; // faster reload simulates dual-targeting
+                unit.cooldown *= UPGRADE_DUAL_TARGET_CD; // faster reload simulates dual-targeting
                 break;
             case 'anti-ship':
                 if (!unit.targets.includes('tanker')) unit.targets.push('tanker');
                 break;
             case 'splash':
-                unit.splashRadius = 60;
+                unit.splashRadius = UPGRADE_SPLASH_RADIUS;
                 break;
             case 'strikes-7':
                 unit.strikesRemaining = Math.max(unit.strikesRemaining, 7);
@@ -1547,19 +1668,19 @@ function upgradeUnit(unit) {
                 break;
             case 'fast-respawn':
                 // Reduce mine respawn time (handled via mine layer's cooldown)
-                unit.cooldown *= 0.6;
+                unit.cooldown *= UPGRADE_FAST_RESPAWN_CD;
                 break;
             case 'mines-6':
                 unit.maxMines = 6;
                 break;
             case 'speed-boost':
-                unit.patrolSpeed *= 1.5;
+                unit.patrolSpeed *= UPGRADE_SPEED_BOOST;
                 break;
             case 'torpedo-burst':
-                unit.dps = Math.round(unit.dps * 1.3); // extra on top of dpsBoost
+                unit.dps = Math.round(unit.dps * UPGRADE_TORPEDO_BURST_DPS); // extra on top of dpsBoost
                 break;
             case 'dual-torpedo':
-                unit.cooldown *= 0.65;
+                unit.cooldown *= UPGRADE_DUAL_TORPEDO_CD;
                 break;
         }
     }
@@ -1651,7 +1772,7 @@ window.addEventListener('keydown', (e) => {
     if (GameState.phase === 'intro') return;
 
     // Arrow keys for panning
-    const panStep = 40;
+    const panStep = PAN_STEP;
     switch (e.key) {
         case 'ArrowUp':    panY += panStep; updateViewportTransform(); e.preventDefault(); return;
         case 'ArrowDown':  panY -= panStep; updateViewportTransform(); e.preventDefault(); return;
@@ -1729,10 +1850,10 @@ function activateF14() {
 
     // Create F-14 sweep entity — flies across the map hitting naval targets
     const f14 = {
-        x: -100,
-        y: 400 + Math.random() * 800,
+        x: F14_SPAWN_X,
+        y: F14_SPAWN_Y_BASE + Math.random() * F14_SPAWN_Y_RANGE,
         speed: F14_SPEED,
-        missilesRemaining: 6,
+        missilesRemaining: F14_MISSILES_PER_SWEEP,
         missileCooldown: 0,
         active: true,
     };
@@ -1771,7 +1892,7 @@ function updateF14Strike(dt) {
             }
         }
 
-        if (target && Math.hypot(target.x - f14.x, target.y - f14.y) < 800) {
+        if (target && Math.hypot(target.x - f14.x, target.y - f14.y) < F14_MISSILE_RANGE) {
             // Fire missile
             target.hp -= F14_DAMAGE;
             spawnEffect(target.x, target.y, '#ffffff', 40, 0.8);
@@ -1781,12 +1902,12 @@ function updateF14Strike(dt) {
                 spawnEffect(target.x, target.y, '#ffff00', 50, 1.0);
             }
             f14.missilesRemaining--;
-            f14.missileCooldown = 0.3;
+            f14.missileCooldown = F14_MISSILE_INTERVAL;
         }
     }
 
     // Off screen? Done
-    if (f14.x > 2600) {
+    if (f14.x > F14_DESPAWN_X) {
         f14.active = false;
         GameState.f14Active = null;
     }
@@ -2341,7 +2462,7 @@ function checkWaveComplete() {
     // Wave is complete when spawn queue is empty AND no enemies remain
     if (GameState.spawnQueue.length === 0 && Entities.enemies.length === 0) {
         GameState.phase = 'waveEnd';
-        GameState.waveEndTimer = 2.0; // brief pause before next wave
+        GameState.waveEndTimer = WAVE_END_PAUSE;
     }
 }
 
@@ -2355,7 +2476,7 @@ function advanceToNextWave() {
     }
 
     // Award wave income: oil_price * multiplier
-    const income = Math.round(GameState.oil * WAVE_INCOME_MULTIPLIER / 5) * 5;
+    const income = Math.round(GameState.oil * WAVE_INCOME_MULTIPLIER / INCOME_ROUND_TO) * INCOME_ROUND_TO;
     GameState.funds += income;
 
     // Unlock new paths if applicable
@@ -2526,7 +2647,7 @@ function spawnEnemy(entry) {
 function spawnF35(entry) {
     // F-35s fly across the map from a random edge
     const fromLeft = Math.random() > 0.5;
-    const yPos = 100 + Math.random() * 1400;
+    const yPos = F35_SPAWN_Y_MIN + Math.random() * F35_SPAWN_Y_RANGE;
 
     Entities.enemies.push({
         type: 'f35',
@@ -2534,10 +2655,10 @@ function spawnF35(entry) {
         hp: entry.hp,
         hpMax: entry.hp,
         speed: entry.speed,
-        x: fromLeft ? -50 : 2450,
+        x: fromLeft ? F35_SPAWN_X_LEFT : F35_SPAWN_X_RIGHT,
         y: yPos,
         dx: fromLeft ? 1 : -1,     // direction
-        dy: (Math.random() - 0.5) * 0.3,
+        dy: (Math.random() - 0.5) * F35_DY_SPREAD,
         cooldownTimer: 0,
         alive: true,
     });
@@ -2545,9 +2666,18 @@ function spawnF35(entry) {
 
 
 /* ====================================================================
-   SECTION 15d: ENTITY UPDATE STUBS
-   These will be fully implemented in Steps 3-6. Minimal versions here
-   so the phase state machine can run without errors.
+   SECTION 15d: ENTITY UPDATE — COMBAT & MOVEMENT
+   Core game simulation. Each function runs once per frame (via
+   update() in the game loop). Entity lifecycle:
+     spawn → move/patrol → acquire target → fire → hit/miss → die/escape
+   Key subsystems:
+     - updateEnemies:          path-following (ships), free-flight (F-35s)
+     - updatePlayerUnits:      cooldown → findTarget → fireProjectile
+     - updateProjectiles:      homing movement → hit detection → damage
+     - updateEnemyCombat:      destroyer/F-35 fire at player units
+     - updateCruiseMissiles:   spawn → home on target → evasion check
+     - updateFABPatrol:        circular water patrol (FABs + Subs)
+     - updateMineLayers/Mines: autonomous mine placement via USVs
    ==================================================================== */
 
 function updateEnemies(dt) {
@@ -2561,7 +2691,7 @@ function updateEnemies(dt) {
             // F-35s attack while flying
             updateEnemyCombat(enemy, dt);
             // Remove if off-screen
-            if (enemy.x < -100 || enemy.x > 2500 || enemy.y < -100 || enemy.y > 1800) {
+            if (enemy.x < -F35_DESPAWN_MARGIN || enemy.x > F35_DESPAWN_X_MAX || enemy.y < -F35_DESPAWN_MARGIN || enemy.y > F35_DESPAWN_Y_MAX) {
                 enemy.alive = false;
             }
             continue;
@@ -2705,7 +2835,7 @@ function fireProjectile(unit, target) {
         y: unit.y,
         targetRef: target,
         dmg: unit.dps,
-        speed: 800,
+        speed: PLAYER_PROJECTILE_SPEED,
         ownerUnit: unit,
         isSplash: unit.splashRadius > 0,
         splashRadius: unit.splashRadius || 0,
@@ -2736,7 +2866,7 @@ function updateProjectiles(dt) {
         const dy = t.y - p.y;
         const dist = Math.hypot(dx, dy);
 
-        if (dist < 20) {
+        if (dist < PROJECTILE_HIT_RADIUS) {
             // Hit!
             if (p.isIntercept) {
                 // SAM intercept attempt
@@ -2754,7 +2884,7 @@ function updateProjectiles(dt) {
                     Entities.enemies.forEach(e => {
                         if (e === t || !e.alive) return;
                         if (Math.hypot(e.x - t.x, e.y - t.y) < p.splashRadius) {
-                            e.hp -= p.dmg * 0.5; // splash does 50% damage
+                            e.hp -= p.dmg * SPLASH_DAMAGE_FRACTION;
                         }
                     });
                     spawnEffect(t.x, t.y, '#ff6600', p.splashRadius, 0.5);
@@ -2794,7 +2924,7 @@ function updateEnemyProjectiles(dt) {
         const dy = t.y - p.y;
         const dist = Math.hypot(dx, dy);
 
-        if (dist < 20) {
+        if (dist < PROJECTILE_HIT_RADIUS) {
             // Hit! Apply damage
             t.hp -= p.dmg;
             spawnEffect(t.x, t.y, '#ff6600', 12, 0.3);
@@ -2858,7 +2988,7 @@ function updateEnemyCombat(enemy, dt) {
             y: enemy.y,
             targetRef: target,
             dmg: dps,
-            speed: 550,
+            speed: ENEMY_PROJECTILE_SPEED,
         });
         enemy.cooldownTimer = cd;
     }
@@ -2896,7 +3026,7 @@ function updateCruiseMissiles(dt, isSetupPhase) {
         const dy = m.targetRef.y - m.y;
         const dist = Math.hypot(dx, dy);
 
-        if (dist < 25) {
+        if (dist < CRUISE_MISSILE_HIT_RADIUS) {
             // Impact! Check evasion
             const evadeChance = m.targetRef.evasion || 0;
             if (Math.random() < evadeChance) {
@@ -2926,10 +3056,10 @@ function spawnCruiseMissile() {
     const edge = Math.floor(Math.random() * 4);
     let x, y;
     switch (edge) {
-        case 0: x = Math.random() * 2400; y = -50; break;        // top
-        case 1: x = 2450; y = Math.random() * 1680; break;       // right
-        case 2: x = Math.random() * 2400; y = 1730; break;       // bottom
-        case 3: x = -50; y = Math.random() * 1680; break;        // left
+        case 0: x = Math.random() * MAP_WIDTH; y = -OFFSCREEN_SPAWN_MARGIN; break;                          // top
+        case 1: x = MAP_WIDTH + OFFSCREEN_SPAWN_MARGIN; y = Math.random() * MAP_HEIGHT; break;             // right
+        case 2: x = Math.random() * MAP_WIDTH; y = MAP_HEIGHT + OFFSCREEN_SPAWN_MARGIN; break;             // bottom
+        case 3: x = -OFFSCREEN_SPAWN_MARGIN; y = Math.random() * MAP_HEIGHT; break;                        // left
     }
 
     Entities.cruiseMissiles.push({
@@ -2992,7 +3122,7 @@ function updateFABPatrol(dt) {
         } else {
             // Skip ahead in angle until we find water again
             // (prevents FAB from getting stuck on land boundaries)
-            unit.patrolAngle += 0.2;
+            unit.patrolAngle += PATROL_LAND_SKIP_ANGLE;
         }
     }
 }
@@ -3020,10 +3150,9 @@ function updateMineLayers(dt) {
 
 function placeMine(mineLayer) {
     // Find a valid water position within placement radius, along the tanker corridor
-    const maxAttempts = 20;
-    for (let i = 0; i < maxAttempts; i++) {
+    for (let i = 0; i < MINE_PLACEMENT_ATTEMPTS; i++) {
         const angle = Math.random() * Math.PI * 2;
-        const dist = 50 + Math.random() * (mineLayer.range - 50);
+        const dist = MINE_PLACEMENT_MIN_DIST + Math.random() * (mineLayer.range - MINE_PLACEMENT_MIN_DIST);
         const mx = mineLayer.x + Math.cos(angle) * dist;
         const my = mineLayer.y + Math.sin(angle) * dist;
 
@@ -3036,9 +3165,9 @@ function placeMine(mineLayer) {
             const path = lanePaths[pathId];
             if (!path) continue;
             const totalLen = path.getTotalLength();
-            for (let t = 0; t < totalLen; t += 100) {
+            for (let t = 0; t < totalLen; t += MINE_LANE_SAMPLE_STEP) {
                 const pt = path.getPointAtLength(t);
-                if (Math.hypot(pt.x - mx, pt.y - my) < 150) {
+                if (Math.hypot(pt.x - mx, pt.y - my) < MINE_LANE_PROXIMITY) {
                     nearLane = true;
                     break;
                 }
@@ -3056,7 +3185,7 @@ function placeMine(mineLayer) {
             ownerUnit: mineLayer,
             damage: mineLayer.dps,
             splashRadius: UNIT_DEFS[3].mineSplashRadius,
-            speed: 180,
+            speed: USV_SPEED,
             phase: 'outbound',  // outbound → laying → returning
             alive: true,
         });
@@ -3077,7 +3206,7 @@ function updateUSVs(dt) {
             const dx = usv.targetX - usv.x;
             const dy = usv.targetY - usv.y;
             const dist = Math.hypot(dx, dy);
-            if (dist < 10) {
+            if (dist < USV_ARRIVAL_RADIUS) {
                 // Arrived — lay the mine
                 Entities.mines.push({
                     x: usv.targetX,
@@ -3101,7 +3230,7 @@ function updateUSVs(dt) {
             const dy = homeY - usv.y;
             const dist = Math.hypot(dx, dy);
 
-            if (dist < 15 || usv.ownerUnit.hp <= 0) {
+            if (dist < USV_HOME_RADIUS || usv.ownerUnit.hp <= 0) {
                 // Arrived home (or home destroyed) — USV disappears
                 usv.alive = false;
             } else {
@@ -3166,7 +3295,7 @@ function updateMines(dt) {
             if (!enemy.alive) continue;
             if (enemy.type === 'f35') continue; // Mines don't affect aircraft
 
-            if (Math.hypot(enemy.x - mine.x, enemy.y - mine.y) < 35) {
+            if (Math.hypot(enemy.x - mine.x, enemy.y - mine.y) < MINE_DETONATION_RADIUS) {
                 // DETONATE!
                 SFX.mineDetonate();
                 enemy.hp -= mine.damage;
@@ -3176,7 +3305,7 @@ function updateMines(dt) {
                 for (const other of Entities.enemies) {
                     if (other === enemy || !other.alive || other.type === 'f35') continue;
                     if (Math.hypot(other.x - mine.x, other.y - mine.y) < mine.splashRadius) {
-                        other.hp -= mine.damage * 0.5;
+                        other.hp -= mine.damage * SPLASH_DAMAGE_FRACTION;
                     }
                 }
 
@@ -3236,7 +3365,7 @@ function enterUnlimitedMode() {
     GameState.phase = 'setup';
     GameState.setupTimer = SETUP_PHASE_DURATION;
     document.getElementById('screen-end').classList.add('hidden');
-    const income = Math.round(GameState.oil * WAVE_INCOME_MULTIPLIER / 5) * 5;
+    const income = Math.round(GameState.oil * WAVE_INCOME_MULTIPLIER / INCOME_ROUND_TO) * INCOME_ROUND_TO;
     GameState.funds += income;
     GameState.wave++;
     updateActivePaths();
@@ -3278,7 +3407,7 @@ function continueAfterStalemate() {
     document.getElementById('screen-end').classList.add('hidden');
 
     // Award income for this transition wave
-    const income = Math.round(GameState.oil * WAVE_INCOME_MULTIPLIER / 5) * 5;
+    const income = Math.round(GameState.oil * WAVE_INCOME_MULTIPLIER / INCOME_ROUND_TO) * INCOME_ROUND_TO;
     GameState.funds += income;
 
     updateActivePaths();
@@ -3318,10 +3447,22 @@ function getHighScores() {
     }
 }
 
-function draw() {
-    ctx.clearRect(0, 0, 2400, 1680);
+/* ====================================================================
+   SECTION 15g: DRAW DISPATCHER
+   Render order matters for visual layering (bottom-to-top):
+     1. Placement preview range     (under everything)
+     2. Mines                       (on the water surface)
+     3. USVs                        (small boats on water)
+     4. Enemies                     (tankers, destroyers, F-35s)
+     5. Player units + range rings  (defensive positions)
+     6. Projectiles                 (both player and enemy)
+     7. Cruise missiles             (incoming threats)
+     8. F-14 strike                 (special ability flyby)
+     9. Visual effects              (explosions, flashes — on top)
+   ==================================================================== */
 
-    // Draw order: range circles (under) → mines → enemies → player units → projectiles → effects
+function draw() {
+    ctx.clearRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
 
     // --- Range circles for selected unit type (placement preview) ---
     if (GameState.selectedUnitType !== -1) {
@@ -3822,7 +3963,7 @@ function drawEffects() {
     // Visual effects (explosions, flashes) — implemented in later steps
     for (let i = Entities.effects.length - 1; i >= 0; i--) {
         const fx = Entities.effects[i];
-        fx.age += 0.016; // approximate
+        fx.age += EFFECT_DT_APPROX; // approximate frame time (draw phase has no dt param)
         if (fx.age > fx.duration) {
             Entities.effects.splice(i, 1);
             continue;
@@ -3852,7 +3993,7 @@ function gameLoop(timestamp) {
         GameState.lastTick = timestamp;
     }
 
-    const dt = Math.min((timestamp - GameState.lastTick) / 1000, 0.1); // cap at 100ms
+    const dt = Math.min((timestamp - GameState.lastTick) / 1000, DT_CAP);
     GameState.lastTick = timestamp;
 
     if (GameState.phase !== 'intro') {
@@ -4171,6 +4312,123 @@ const RegressionTests = {
             F35_START_WAVE === 5);
         this.assert('F-35 kill bonus > escort kill bonus',
             F35_KILL_BONUS > ESCORT_KILL_BONUS);
+
+        // --- Submarine patrol properties ---
+        this.assert('Sub has patrolRadius in UNIT_DEFS',
+            UNIT_DEFS[5].patrolRadius === 160);
+        this.assert('Sub has patrolSpeed in UNIT_DEFS',
+            UNIT_DEFS[5].patrolSpeed === 50);
+        this.assert('Sub patrol slower than FAB',
+            UNIT_DEFS[5].patrolSpeed < UNIT_DEFS[4].patrolSpeed);
+
+        // --- FAB patrol properties ---
+        this.assert('FAB has patrolRadius in UNIT_DEFS',
+            UNIT_DEFS[4].patrolRadius === 200);
+        this.assert('FAB has patrolSpeed in UNIT_DEFS',
+            UNIT_DEFS[4].patrolSpeed === 120);
+
+        // --- Mine layer combat exclusion ---
+        this.assert('Mine layer is defId 3',
+            UNIT_DEFS[3].shortName === 'MINE' && UNIT_DEFS[3].id === 3);
+        this.assert('Mine layer placement is coast',
+            UNIT_DEFS[3].placement === 'coast');
+        this.assert('Mine layer has maxMines property',
+            typeof UNIT_DEFS[3].maxMines === 'number' && UNIT_DEFS[3].maxMines > 0);
+
+        // --- USV constants ---
+        this.assert('USV speed defined',
+            USV_SPEED === 180);
+        this.assert('USV arrival radius defined',
+            USV_ARRIVAL_RADIUS === 10);
+        this.assert('USV home radius defined',
+            USV_HOME_RADIUS === 15);
+
+        // --- Cruise missile constants ---
+        this.assert('Cruise missile base rate defined',
+            typeof CRUISE_MISSILE_BASE_RATE === 'number' && CRUISE_MISSILE_BASE_RATE > 0);
+        this.assert('Cruise missile setup multiplier < 1',
+            CRUISE_MISSILE_SETUP_MULT < 1);
+
+        // --- Unlimited mode victory skip ---
+        this.assert('passedStalemate exists in GameState',
+            'passedStalemate' in GameState);
+
+        // --- Upgrade special multiplier constants ---
+        this.assert('Dual-target CD multiplier < 1',
+            UPGRADE_DUAL_TARGET_CD === 0.7);
+        this.assert('Fast-respawn CD multiplier < 1',
+            UPGRADE_FAST_RESPAWN_CD === 0.6);
+        this.assert('Dual-torpedo CD multiplier < 1',
+            UPGRADE_DUAL_TORPEDO_CD === 0.65);
+        this.assert('Torpedo-burst DPS multiplier > 1',
+            UPGRADE_TORPEDO_BURST_DPS === 1.3);
+        this.assert('Speed-boost multiplier > 1',
+            UPGRADE_SPEED_BOOST === 1.5);
+        this.assert('Splash upgrade radius defined',
+            UPGRADE_SPLASH_RADIUS === 60);
+
+        // --- Projectile & combat constants ---
+        this.assert('Player projectile speed',
+            PLAYER_PROJECTILE_SPEED === 800);
+        this.assert('Enemy projectile speed',
+            ENEMY_PROJECTILE_SPEED === 550);
+        this.assert('Projectile hit radius',
+            PROJECTILE_HIT_RADIUS === 20);
+        this.assert('Splash damage fraction',
+            SPLASH_DAMAGE_FRACTION === 0.5);
+        this.assert('Mine detonation radius',
+            MINE_DETONATION_RADIUS === 35);
+
+        // --- F-14 spawn/despawn bounds ---
+        this.assert('F-14 spawns off-screen left',
+            F14_SPAWN_X < 0);
+        this.assert('F-14 despawn past right edge',
+            F14_DESPAWN_X > F35_DESPAWN_X_MAX);
+
+        // --- F-35 spawn/despawn bounds ---
+        this.assert('F-35 spawn left is off-screen',
+            F35_SPAWN_X_LEFT < 0);
+        this.assert('F-35 spawn right > spawn left',
+            F35_SPAWN_X_RIGHT > F35_SPAWN_X_LEFT);
+        this.assert('F-35 despawn margin defined',
+            F35_DESPAWN_MARGIN === 100);
+
+        // --- Oil color thresholds ---
+        this.assert('Oil color thresholds ordered: green > cyan > amber',
+            OIL_COLOR_GREEN > OIL_COLOR_CYAN && OIL_COLOR_CYAN > OIL_COLOR_AMBER);
+
+        // --- Effect timing ---
+        this.assert('Effect dt approximation = ~60fps',
+            EFFECT_DT_APPROX > 0.015 && EFFECT_DT_APPROX < 0.02);
+
+        // --- Audio system (expanded) ---
+        this.assert('SFX has all combat/UI methods',
+            typeof SFX.unitPlaced === 'function' &&
+            typeof SFX.waveStart === 'function' &&
+            typeof SFX.torpedoLaunch === 'function' &&
+            typeof SFX.droneAttack === 'function' &&
+            typeof SFX.cruiseMissileWarning === 'function' &&
+            typeof SFX.oilUp === 'function' &&
+            typeof SFX.oilDown === 'function' &&
+            typeof SFX.victory === 'function' &&
+            typeof SFX.defeat === 'function' &&
+            typeof SFX.stalemate === 'function');
+
+        // --- Reference panel ---
+        this.assert('toggleReference function exists',
+            typeof toggleReference === 'function');
+
+        // --- Map dimensions ---
+        this.assert('MAP_WIDTH matches SVG viewBox',
+            MAP_WIDTH === 2400);
+        this.assert('MAP_HEIGHT matches SVG viewBox',
+            MAP_HEIGHT === 1680);
+        this.assert('Offscreen spawn margin defined',
+            OFFSCREEN_SPAWN_MARGIN === 50);
+
+        // --- Mine lane sampling ---
+        this.assert('Mine lane sample step defined',
+            MINE_LANE_SAMPLE_STEP === 100);
 
         // --- Report ---
         const passed = this.results.filter(r => r.pass).length;
