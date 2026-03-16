@@ -664,14 +664,14 @@
             <ul>
                 <li><strong>PRIMARY:</strong> Drive crude oil above <strong>$250/barrel</strong></li>
                 <li><strong>FAIL:</strong> Oil drops below <strong>$60/barrel</strong></li>
-                <li><strong>STALEMATE:</strong> 20 waves with no resolution</li>
-                <li>Funds per wave: <strong>logarithmic</strong> (diminishing returns at high prices)</li>
+                <li><strong>STALEMATE:</strong> Survive 20 waves without resolution</li>
+                <li><strong>ECONOMY:</strong> Oil price changes have <em>diminishing returns</em> at high prices. Kills are worth less as oil climbs; escapes become more punishing. Wave income also flattens logarithmically.</li>
             </ul>
 
             <h3>CONTROLS</h3>
             <ul>
                 <li><strong>[1-6]</strong> Select unit type</li>
-                <li><strong>[7/F]</strong> F-14 Tomcat strike</li>
+                <li><strong>[7/F]</strong> F-14 Tomcat Strike</li>
                 <li><strong>[U]</strong> Upgrade selected unit</li>
                 <li><strong>[Tab]</strong> Cycle placed units</li>
                 <li><strong>[S]</strong> Toggle unit sidebar</li>
@@ -683,54 +683,64 @@
                 <li><strong>Right-click</strong> Cancel placement</li>
             </ul>
 
-            <h3>UNIT SPECIFICATIONS</h3>
+            <h3>IRANIAN DEFENSE ASSETS</h3>
             <table>
-                <thead><tr><th>UNIT</th><th>COST</th><th>HP</th><th>DPS</th><th>RNG</th><th>SIG</th></tr></thead>
+                <thead><tr><th>DESIGNATION</th><th>COST</th><th>HP</th><th>DPS</th><th>RNG</th><th>SIG</th></tr></thead>
                 <tbody>
-                    <tr><td>Silkworm Battery</td><td>$200M</td><td>450</td><td>50</td><td>750</td><td>HEAVY</td></tr>
-                    <tr><td>Misagh-2 SAM</td><td>$120M</td><td>250</td><td>20</td><td>650</td><td>MED</td></tr>
-                    <tr><td>Shahed Drone</td><td>$60M</td><td>80</td><td>120</td><td>900</td><td>LOW</td></tr>
-                    <tr><td>Mine Layer</td><td>$100M</td><td>280</td><td>300*</td><td>550</td><td>MED</td></tr>
-                    <tr><td>Zolfaghar FAB</td><td>$75M</td><td>100</td><td>20</td><td>350</td><td>LOW</td></tr>
-                    <tr><td>Ghadir Sub</td><td>$250M</td><td>200</td><td>65</td><td>500</td><td>STEALTH</td></tr>
+                    <tr><td>HY-2 Silkworm ASCM Battery</td><td>$200M</td><td>450</td><td>50</td><td>750</td><td>HEAVY</td></tr>
+                    <tr><td>Misagh-2 SAM Site</td><td>$120M</td><td>250</td><td>20</td><td>650</td><td>MED</td></tr>
+                    <tr><td>Shahed One-Way Strike Drone</td><td>$60M</td><td>80</td><td>120</td><td>900</td><td>LOW</td></tr>
+                    <tr><td>Shahid Baziari Mine Layer</td><td>$100M</td><td>280</td><td>300*</td><td>550</td><td>MED</td></tr>
+                    <tr><td>Zolfaghar Fast Attack Boat</td><td>$75M</td><td>100</td><td>20</td><td>350</td><td>LOW</td></tr>
+                    <tr><td>Ghadir-class Submarine</td><td>$250M</td><td>200</td><td>65</td><td>500</td><td>STEALTH</td></tr>
                 </tbody>
             </table>
-            <div style="opacity: 0.5; font-size: 11px; margin-top: 4px;">* Mine damage per detonation (splash). Mines placed by USV.</div>
+            <div style="opacity: 0.5; font-size: 11px; margin-top: 4px;">* Mine damage per detonation (with splash). DPS column = damage per attack cycle for all other units.</div>
+
+            <h3>UNIT TACTICS</h3>
+            <ul>
+                <li><strong>HY-2 Silkworm ASCM Battery</strong> &mdash; Powerful anti-ship cruise missile battery. Place on Iranian territory. High damage and range, but HEAVY signature draws cruise missile fire. Pair with SAMs for protection.</li>
+                <li><strong>Misagh-2 SAM Site</strong> &mdash; Anti-air defense. Intercepts incoming cruise missiles (30% chance per shot) and engages F-35s. Also fires on surface targets. Essential for protecting high-value assets from missile strikes.</li>
+                <li><strong>Shahed One-Way Strike Drone</strong> &mdash; Expendable loitering munition swarm. Launches waves of kamikaze drones at surface targets with splash damage. <em>Depletes after a fixed number of strikes</em> (base: 5), then is destroyed. Cheap, long range, but one-time use. LOW signature makes it hard to target.</li>
+                <li><strong>Shahid Baziari Mine Layer</strong> &mdash; Coastal mine warfare system. Place near the coast; an unmanned surface vessel (USV) autonomously travels out to place mines along shipping lanes within its radius. <em>Maximum active mines limited</em> (base: 4). Mines detonate on proximity to passing ships, dealing heavy splash damage. Detonated mines respawn after a delay.</li>
+                <li><strong>Zolfaghar Fast Attack Boat (FAB)</strong> &mdash; Small, fast patrol craft. Place in water; <em>automatically patrols in a circle</em> around its deployment point. Cheap and evasive (LOW signature, 90% cruise missile evasion), but low damage. Useful for harassing tankers in the strait.</li>
+                <li><strong>Ghadir-class Submarine</strong> &mdash; Stealth torpedo platform. Place in water; <em>patrols in a circle</em> (slower than FABs). STEALTH signature makes it immune to cruise missiles and invisible to F-35s. Prioritizes escort destroyers. Expensive but survivable.</li>
+            </ul>
 
             <h3>UPGRADE SYSTEM</h3>
-            <div style="opacity: 0.7; font-size: 12px; margin-bottom: 8px;">Select a placed unit + press [U]. Cost = base &times; 1.4 per tier.</div>
+            <div style="opacity: 0.7; font-size: 12px; margin-bottom: 8px;">Select a placed unit and press [U] to upgrade. Each tier costs base price &times; 1.4<sup>tier</sup>. Upgrades are permanent and cumulative.</div>
             <table>
                 <thead><tr><th>UNIT</th><th>TIER 1</th><th>TIER 2</th></tr></thead>
                 <tbody>
-                    <tr><td>Battery</td><td>Extended Range (+30% rng) $280M</td><td>Dual Targeting (+25% dps, +20% hp) $392M</td></tr>
-                    <tr><td>SAM</td><td>Anti-Ship (+15% rng, +20% dps) $168M</td><td>Dual Target + Splash (+30% dps, +15% hp) $235M</td></tr>
-                    <tr><td>Drone</td><td>Extended Swarm (7 strikes) $84M</td><td>Heavy Swarm (+10% rng, +25% dps, 10 strikes) $118M</td></tr>
-                    <tr><td>Mine</td><td>Heavy Mines (+60% dmg, faster) $140M</td><td>Dense Field (+15% rng, 6 mines) $196M</td></tr>
-                    <tr><td>FAB</td><td>Fast Attack (+15% rng, +30% dps, +50% spd) $105M</td><td>Torpedo Kit (+50% dps, +20% hp) $147M</td></tr>
-                    <tr><td>Sub</td><td>Adv. Torpedoes (+20% rng, +25% dps) $350M</td><td>Dual Salvo (+40% dps, +15% hp) $490M</td></tr>
+                    <tr><td>Silkworm</td><td><strong>Extended Range</strong> (+30% range) $280M</td><td><strong>Dual Targeting</strong> (+25% dps, +20% hp, faster reload) $392M</td></tr>
+                    <tr><td>SAM</td><td><strong>Anti-Ship Module</strong> (+15% range, +20% dps, adds tanker targeting) $168M</td><td><strong>Dual Target + Splash</strong> (+30% dps, +15% hp, 60px splash) $235M</td></tr>
+                    <tr><td>Drone</td><td><strong>Extended Swarm</strong> (7 strikes instead of 5, +15% dps) $84M</td><td><strong>Heavy Swarm</strong> (10 strikes, +10% range, +25% dps) $118M</td></tr>
+                    <tr><td>Mine Layer</td><td><strong>Heavy Mines</strong> (+60% mine damage, faster respawn) $140M</td><td><strong>Dense Field</strong> (+15% placement range, 6 active mines) $196M</td></tr>
+                    <tr><td>FAB</td><td><strong>Fast Attack</strong> (+15% range, +30% dps, +50% patrol speed) $105M</td><td><strong>Torpedo Kit</strong> (+50% dps, +20% hp, burst fire) $147M</td></tr>
+                    <tr><td>Submarine</td><td><strong>Advanced Torpedoes</strong> (+20% range, +25% dps) $350M</td><td><strong>Dual Salvo</strong> (+40% dps, +15% hp, faster reload) $490M</td></tr>
                 </tbody>
             </table>
 
-            <h3>THREAT ASSESSMENT</h3>
+            <h3>COALITION THREAT ASSESSMENT</h3>
             <ul>
-                <li><strong>TANKERS:</strong> Small/Med/VLCC. Destroy to raise oil. Escape lowers oil.</li>
-                <li><strong>DESTROYERS:</strong> Fire on your units. Destroy for $150M + F-14 charge.</li>
-                <li><strong>F-35s:</strong> Air units from wave 5. Target non-subs. $200M on kill.</li>
-                <li><strong>CRUISE MISSILES:</strong> Target by signature. Only SAMs intercept (30%).</li>
+                <li><strong>TANKERS</strong> (Small / Medium / VLCC) &mdash; Commercial vessels transiting the strait. Destroying them raises global oil prices; letting them escape reduces pressure. Larger tankers are tougher but worth more. <em>Oil price changes have diminishing returns as prices rise.</em></li>
+                <li><strong>ESCORT DESTROYERS</strong> &mdash; Arleigh Burke-class guided missile destroyers. Heavily armed and armored; fire on Iranian defensive positions within range. Cannot strike deep inland. Destroying one awards $150M and contributes toward F-14 charges.</li>
+                <li><strong>F-35 LIGHTNING II</strong> (from Wave 5) &mdash; Stealth strike aircraft. Fly across the map on attack runs, targeting all units except submarines. Dangerous to exposed positions. $200M bounty on kill.</li>
+                <li><strong>TOMAHAWK CRUISE MISSILES</strong> &mdash; Long-range precision strikes. Target units weighted by radar signature (HEAVY targeted most, STEALTH immune). Only SAM sites can intercept (30% per engagement). The primary threat to static defenses.</li>
             </ul>
 
-            <h3>SPECIAL: F-14 TOMCAT</h3>
+            <h3>SPECIAL: F-14 TOMCAT STRIKE</h3>
             <ul>
-                <li>Charges build from destroyer kills (2 kills = 1 charge)</li>
-                <li>Max 3 charges. 30s cooldown between strikes.</li>
-                <li>Devastating anti-ship sweep across the map.</li>
+                <li>Charges accumulate from escort destroyer kills (2 kills = 1 charge, max 3).</li>
+                <li>30-second cooldown between strikes. Press [7] or [F] to launch.</li>
+                <li>An F-14 sweeps across the map, firing 6 missiles at the largest available targets. Devastating to tanker convoys.</li>
             </ul>
 
             <h3>SHIPPING LANES</h3>
             <ul>
-                <li><strong>Waves 1-7:</strong> TR-7 only</li>
-                <li><strong>Waves 8-14:</strong> + Northern Qeshm route</li>
-                <li><strong>Waves 15+:</strong> + Southern flanking route</li>
+                <li><strong>Waves 1&ndash;7:</strong> TR-7 (primary) only</li>
+                <li><strong>Waves 8&ndash;14:</strong> + Northern Qeshm route unlocks</li>
+                <li><strong>Waves 15+:</strong> + Southern flanking route unlocks</li>
             </ul>
         </div>
 
@@ -1023,8 +1033,8 @@ const DT_CAP = 0.1;                     // max delta-time per frame (seconds), p
 const UNIT_DEFS = [
     {
         id: 0,
-        name: 'HY-2 Silkworm Battery',
-        shortName: 'SILKWORM',
+        name: 'HY-2 Silkworm ASCM Battery',
+        shortName: 'ASCM BATTERY',
         icon: 'BATT',
         cost: 200,
         hp: 450,
@@ -1043,7 +1053,7 @@ const UNIT_DEFS = [
     {
         id: 1,
         name: 'Misagh-2 SAM Site',
-        shortName: 'SAM',
+        shortName: 'SAM SITE',
         icon: 'SAM',
         cost: 120,
         hp: 250,
@@ -1063,8 +1073,8 @@ const UNIT_DEFS = [
     },
     {
         id: 2,
-        name: 'Shahed Drone Swarm',
-        shortName: 'DRONE',
+        name: 'Shahed One-Way Strike Drone',
+        shortName: 'DRONE SWARM',
         icon: 'DRN',
         cost: 60,
         hp: 80,
@@ -1085,8 +1095,8 @@ const UNIT_DEFS = [
     },
     {
         id: 3,
-        name: 'Mine Layer System',
-        shortName: 'MINE',
+        name: 'Shahid Baziari Mine Layer',
+        shortName: 'MINE LAYER',
         icon: 'MNL',
         cost: 100,
         hp: 280,
@@ -1107,8 +1117,8 @@ const UNIT_DEFS = [
     },
     {
         id: 4,
-        name: 'Zolfaghar FAB',
-        shortName: 'FAB',
+        name: 'Zolfaghar Fast Attack Boat',
+        shortName: 'FAST ATTACK',
         icon: 'FAB',
         cost: 75,
         hp: 100,
@@ -1128,8 +1138,8 @@ const UNIT_DEFS = [
     },
     {
         id: 5,
-        name: 'Ghadir Submarine',
-        shortName: 'SUB',
+        name: 'Ghadir-class Submarine',
+        shortName: 'SUBMARINE',
         icon: 'SUB',
         cost: 250,
         hp: 200,
@@ -4541,7 +4551,7 @@ const RegressionTests = {
 
         // --- Mine layer combat exclusion ---
         this.assert('Mine layer is defId 3',
-            UNIT_DEFS[3].shortName === 'MINE' && UNIT_DEFS[3].id === 3);
+            UNIT_DEFS[3].shortName === 'MINE LAYER' && UNIT_DEFS[3].id === 3);
         this.assert('Mine layer placement is coast',
             UNIT_DEFS[3].placement === 'coast');
         this.assert('Mine layer has maxMines property',
