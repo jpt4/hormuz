@@ -1295,6 +1295,7 @@ let isPanning = false, panStartX, panStartY;
 
 function updateViewportTransform() {
     viewport.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+    _containerRect = null; // invalidate — will be lazily refreshed on next screenToWorld
 }
 
 // Mouse wheel zoom (focal point under cursor)
@@ -1378,38 +1379,40 @@ container.addEventListener('contextmenu', (e) => {
    SECTION 6: COORDINATE HELPERS
    ==================================================================== */
 
+/** Cached container rect — updated on resize/scroll to avoid layout thrash per mousemove */
+let _containerRect = null;
+function updateContainerRect() { _containerRect = container.getBoundingClientRect(); }
+window.addEventListener('resize', updateContainerRect);
+window.addEventListener('scroll', updateContainerRect);
+
 /** Convert screen (client) coordinates to game-world (SVG) coordinates */
 function screenToWorld(clientX, clientY) {
-    const rect = container.getBoundingClientRect();
+    if (!_containerRect) updateContainerRect();
     return {
-        x: (clientX - rect.left - panX) / zoom,
-        y: (clientY - rect.top - panY) / zoom
+        x: (clientX - _containerRect.left - panX) / zoom,
+        y: (clientY - _containerRect.top - panY) / zoom
     };
 }
 
 /** Check if a point is inside the Iranian landmass (mainland) */
+/** Reusable SVG point — avoids allocating one per hit-test call */
+const _svgPt = document.createElementNS('http://www.w3.org/2000/svg', 'svg').createSVGPoint();
+function _setSVGPt(x, y) { _svgPt.x = x; _svgPt.y = y; return _svgPt; }
+
 function isPointInIran(x, y) {
-    const pt = svgEl.createSVGPoint();
-    pt.x = x;
-    pt.y = y;
-    return iranCoast.isPointInFill(pt);
+    return iranCoast.isPointInFill(_setSVGPt(x, y));
 }
 
 /** Check if a point is inside the Arabian landmass (UAE/Oman) */
 function isPointInArabia(x, y) {
-    const pt = svgEl.createSVGPoint();
-    pt.x = x;
-    pt.y = y;
-    return arabiaCoast.isPointInFill(pt);
+    return arabiaCoast.isPointInFill(_setSVGPt(x, y));
 }
 
 /** Check if a point is on any Iranian-controlled island */
 function isPointOnIsland(x, y) {
-    const pt = svgEl.createSVGPoint();
-    pt.x = x;
-    pt.y = y;
+    _setSVGPt(x, y);
     for (const island of islandElements) {
-        if (island.isPointInFill(pt)) return true;
+        if (island.isPointInFill(_svgPt)) return true;
     }
     return false;
 }
@@ -1630,6 +1633,10 @@ function calculateWaveIncome() {
 // Cache previous UI values to avoid redundant DOM writes
 const _uiCache = { oil: -1, oilColor: '', funds: -1, wave: -1, stalemate: false,
                     f14: -1, phase: '', setupTimer: -1, date: '' };
+// Sidebar dirty-flag: only rebuild when state changes
+let _sidebarDirty = true;
+let _sidebarKey = '';
+function markSidebarDirty() { _sidebarDirty = true; }
 
 function updateUI() {
     // Oil price — only update if value or color changed
@@ -1705,6 +1712,16 @@ function updateUI() {
 }
 
 function updateSidebarUnits() {
+    // Build a cache key from values that affect sidebar appearance
+    const selUnit = GameState.selectedPlacedUnit;
+    const selHp = selUnit ? Math.round(selUnit.hp) : -1;
+    const selTier = selUnit ? selUnit.tier : -1;
+    const selIdx = selUnit ? Entities.playerUnits.indexOf(selUnit) : -1;
+    const key = `${Math.round(GameState.funds)}|${GameState.selectedUnitType}|${selIdx}|${selHp}|${selTier}|${GameState.f14Charges}|${Math.ceil(GameState.f14Cooldown)}`;
+    if (key === _sidebarKey && !_sidebarDirty) return;
+    _sidebarKey = key;
+    _sidebarDirty = false;
+
     let html = '';
 
     // Show upgrade panel if a placed unit is selected
@@ -2585,6 +2602,7 @@ function update(dt) {
             updateMines(dt);
             updateUSVs(dt);
             updateF14Strike(dt);
+            updateEffects(dt);
             removeDeadEntities();
             if (GameState.setupTimer <= 0) {
                 transitionToDefend();
@@ -2605,6 +2623,7 @@ function update(dt) {
             updateMines(dt);
             updateUSVs(dt);
             updateF14Strike(dt);
+            updateEffects(dt);
             removeDeadEntities();
             // Check if wave is complete (all enemies spawned and cleared)
             checkWaveComplete();
@@ -2974,7 +2993,8 @@ function updatePlayerUnits(dt) {
 
 /**
  * Find the best target for a player unit based on its target priority list.
- * Returns the closest enemy of the highest-priority type within range.
+ * Single pass through enemies: categorize closest-in-range per type, then
+ * pick by priority order.
  */
 function findTarget(unit) {
     const ux = unit.x, uy = unit.y;
@@ -2993,25 +3013,33 @@ function findTarget(unit) {
         if (closest) return closest;
     }
 
-    // Check target priority list — find closest matching enemy per priority type
-    for (const targetType of unit.targets) {
-        let best = null, bestD2 = Infinity;
-        for (const e of Entities.enemies) {
-            if (!e.alive) continue;
-            // Type match check (inline to avoid closure/function overhead)
-            let match = false;
-            if (targetType === 'tanker') match = e.type.startsWith('tanker');
-            else if (targetType === 'destroyer') match = e.type === 'destroyer';
-            else if (targetType === 'f35') match = e.type === 'f35';
-            if (!match) continue;
+    // Single pass: find closest in-range enemy of each type
+    let bestTanker = null, bestTankerD2 = Infinity;
+    let bestDestroyer = null, bestDestroyerD2 = Infinity;
+    let bestF35 = null, bestF35D2 = Infinity;
 
-            const dx = e.x - ux, dy = e.y - uy;
-            const d2 = dx * dx + dy * dy;
-            if (d2 < range2 && d2 < bestD2) {
-                best = e; bestD2 = d2;
-            }
+    for (let i = 0; i < Entities.enemies.length; i++) {
+        const e = Entities.enemies[i];
+        if (!e.alive) continue;
+        const dx = e.x - ux, dy = e.y - uy;
+        const d2 = dx * dx + dy * dy;
+        if (d2 >= range2) continue;
+
+        const t = e.type;
+        if (t === 'destroyer') {
+            if (d2 < bestDestroyerD2) { bestDestroyer = e; bestDestroyerD2 = d2; }
+        } else if (t === 'f35') {
+            if (d2 < bestF35D2) { bestF35 = e; bestF35D2 = d2; }
+        } else { // tanker-small, tanker-med, tanker-large
+            if (d2 < bestTankerD2) { bestTanker = e; bestTankerD2 = d2; }
         }
-        if (best) return best;
+    }
+
+    // Return highest-priority match per unit's target list
+    for (const targetType of unit.targets) {
+        if (targetType === 'tanker' && bestTanker) return bestTanker;
+        if (targetType === 'destroyer' && bestDestroyer) return bestDestroyer;
+        if (targetType === 'f35' && bestF35) return bestF35;
     }
 
     return null;
@@ -3485,12 +3513,13 @@ function updateMines(dt) {
         }
 
         // Check proximity to any enemy ship (not aircraft)
+        const detR2 = MINE_DETONATION_RADIUS * MINE_DETONATION_RADIUS;
         for (const enemy of Entities.enemies) {
             if (!enemy.alive || enemy.type === 'f35') continue;
 
             const dx = enemy.x - mine.x, dy = enemy.y - mine.y;
-            if (dx * dx + dy * dy < MINE_DETONATION_RADIUS * MINE_DETONATION_RADIUS) {
-                // DETONATE! Apply direct damage + splash in single pass
+            if (dx * dx + dy * dy < detR2) {
+                // DETONATE! Apply direct + splash damage, check kills in single pass
                 SFX.mineDetonate();
                 enemy.hp -= mine.damage;
                 spawnEffect(mine.x, mine.y, '#ff6600', mine.splashRadius, 0.8);
@@ -3502,21 +3531,18 @@ function updateMines(dt) {
                     if (sx * sx + sy * sy < splashR2) {
                         other.hp -= mine.damage * SPLASH_DAMAGE_FRACTION;
                     }
-                    // Check kills inline (covers both direct hit and splash victims)
-                }
-
-                // Single kill check pass for all damaged enemies
-                if (enemy.hp <= 0 && enemy.alive) {
-                    enemy.alive = false;
-                    handleEnemyKill(enemy);
-                    spawnEffect(enemy.x, enemy.y, '#ff3333', 30, 0.8);
-                }
-                for (const other of Entities.enemies) {
                     if (other.hp <= 0 && other.alive) {
                         other.alive = false;
                         handleEnemyKill(other);
                         spawnEffect(other.x, other.y, '#ff3333', 30, 0.8);
                     }
+                }
+
+                // Check direct-hit kill (after splash loop to avoid double-processing)
+                if (enemy.hp <= 0 && enemy.alive) {
+                    enemy.alive = false;
+                    handleEnemyKill(enemy);
+                    spawnEffect(enemy.x, enemy.y, '#ff3333', 30, 0.8);
                 }
 
                 // Mine deactivated, start respawn timer
@@ -3529,13 +3555,20 @@ function updateMines(dt) {
 }
 
 function removeDeadEntities() {
-    // In-place removal to avoid allocating new arrays every frame
-    for (let i = Entities.enemies.length - 1; i >= 0; i--) {
-        if (!Entities.enemies[i].alive) Entities.enemies.splice(i, 1);
+    // Swap-and-pop: O(1) per removal instead of O(n) splice
+    let dst = 0;
+    const enemies = Entities.enemies;
+    for (let i = 0; i < enemies.length; i++) {
+        if (enemies[i].alive) enemies[dst++] = enemies[i];
     }
-    for (let i = Entities.playerUnits.length - 1; i >= 0; i--) {
-        if (Entities.playerUnits[i].hp <= 0) Entities.playerUnits.splice(i, 1);
+    enemies.length = dst;
+
+    dst = 0;
+    const units = Entities.playerUnits;
+    for (let i = 0; i < units.length; i++) {
+        if (units[i].hp > 0) units[dst++] = units[i];
     }
+    units.length = dst;
     // Projectiles, missiles cleaned up in their respective update functions
 }
 
@@ -4163,15 +4196,21 @@ function drawMines() {
     });
 }
 
+/** Age and compact effects array — called from update() with real dt */
+function updateEffects(dt) {
+    let dst = 0;
+    const fx = Entities.effects;
+    for (let i = 0; i < fx.length; i++) {
+        fx[i].age += dt;
+        if (fx[i].age <= fx[i].duration) fx[dst++] = fx[i];
+    }
+    fx.length = dst;
+}
+
 function drawEffects() {
-    // Visual effects (explosions, flashes) — implemented in later steps
-    for (let i = Entities.effects.length - 1; i >= 0; i--) {
+    // Visual effects (explosions, flashes) — pure rendering, no mutation
+    for (let i = 0; i < Entities.effects.length; i++) {
         const fx = Entities.effects[i];
-        fx.age += EFFECT_DT_APPROX; // approximate frame time (draw phase has no dt param)
-        if (fx.age > fx.duration) {
-            Entities.effects.splice(i, 1);
-            continue;
-        }
         const alpha = 1 - (fx.age / fx.duration);
         const radius = fx.radius * (1 + fx.age / fx.duration);
 
