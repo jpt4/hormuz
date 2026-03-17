@@ -630,6 +630,7 @@
             <div>STATUS: <span class="blink" id="ui-status">MONITORING_TRAFFIC</span></div>
             <div style="margin-top: 15px; color: #00ffaa;">FUNDS: $<span id="ui-funds">800</span>M</div>
             <div>WAVE: <span id="ui-wave">1 / 20</span></div>
+            <div>MODE: <span id="ui-difficulty">STANDARD</span></div>
             <div>DATE: <span id="ui-date">01 MAR 2026</span></div>
             <div style="margin-top: 10px;">F-14 CHARGES: <span id="ui-f14">0</span> / <span id="ui-f14-max">3</span></div>
         </div>
@@ -742,6 +743,13 @@
                 <li><strong>Waves 8&ndash;14:</strong> + Northern Qeshm route unlocks</li>
                 <li><strong>Waves 15+:</strong> + Southern flanking route unlocks</li>
             </ul>
+
+            <h3>GAME MODES</h3>
+            <ul>
+                <li><strong>TRAINING</strong> &mdash; 2&times; wave income. Learn the mechanics with a generous budget.</li>
+                <li><strong>STANDARD</strong> &mdash; 1&times; wave income. The intended challenge.</li>
+                <li><strong>APOCALYPSE</strong> &mdash; &frac12;&times; wave income. Every dollar counts. For experienced commanders.</li>
+            </ul>
         </div>
 
         <!-- Sidebar toggle button -->
@@ -768,6 +776,11 @@
                 Place units during SETUP (15s) or DEFEND phases.<br>
                 Press [R] anytime for full reference.
             </p>
+            <div id="difficulty-select" style="margin: 20px 0; display: flex; gap: 12px; justify-content: center;">
+                <button class="btn difficulty-btn" data-diff="training" style="padding: 10px 18px; opacity: 0.6;">TRAINING<br><span style="font-size: 10px; opacity: 0.7;">2&times; INCOME</span></button>
+                <button class="btn difficulty-btn selected" data-diff="standard" style="padding: 10px 18px; border-color: #ffff33; color: #ffff33;">STANDARD<br><span style="font-size: 10px; opacity: 0.7;">1&times; INCOME</span></button>
+                <button class="btn difficulty-btn" data-diff="apocalypse" style="padding: 10px 18px; opacity: 0.6;">APOCALYPSE<br><span style="font-size: 10px; opacity: 0.7;">&frac12;&times; INCOME</span></button>
+            </div>
             <button class="btn" id="btn-start">INITIALIZE DEFENSE GRID</button>
         </div>
 
@@ -1027,6 +1040,8 @@ const EFFECT_DT_APPROX = 0.016;         // ~60fps assumed frame time for effect 
 // --- PHASE TIMING ---
 const WAVE_END_PAUSE = 2.0;              // seconds between wave end and next wave setup
 const INCOME_ROUND_TO = 5;               // wave income rounded to nearest N
+// Difficulty mode income multipliers
+const DIFFICULTY_INCOME_MULT = { training: 2.0, standard: 1.0, apocalypse: 0.5 };
 
 // --- VIEWPORT ---
 const PAN_STEP = 40;                     // px — arrow key pan distance per press
@@ -1096,7 +1111,7 @@ const UNIT_DEFS = [
         placement: 'land',
         signature: 'low',
         evasion: EVASION_LOW,
-        targets: ['tanker', 'destroyer'],   // never air
+        targets: ['destroyer', 'tanker'],   // prioritize escorts; never air
         attritable: true,
         maxStrikes: DRONE_MAX_STRIKES,
         splashRadius: DRONE_SPLASH_RADIUS,
@@ -1205,6 +1220,9 @@ const GameState = {
     f14KillCounter: 0,     // kills toward next charge
     f14Cooldown: 0,
     f14Active: null,       // active F-14 sweep entity
+
+    // Difficulty / mode
+    difficulty: 'standard',    // training | standard | apocalypse
 
     // Unlimited mode
     passedStalemate: false,
@@ -1622,7 +1640,8 @@ function applyOilDelta(baseDelta) {
 function calculateWaveIncome() {
     const ratio = GameState.oil / OIL_REFERENCE;
     const raw = WAVE_INCOME_BASE * Math.log(ratio + 1) * OIL_REFERENCE;
-    return Math.round(raw / INCOME_ROUND_TO) * INCOME_ROUND_TO;
+    const mult = DIFFICULTY_INCOME_MULT[GameState.difficulty] || 1.0;
+    return Math.round((raw * mult) / INCOME_ROUND_TO) * INCOME_ROUND_TO;
 }
 
 
@@ -3082,8 +3101,10 @@ function updateProjectiles(dt) {
         const dx = t.x - p.x;
         const dy = t.y - p.y;
         const dist = Math.hypot(dx, dy);
+        const step = p.speed * dt;
 
-        if (dist < PROJECTILE_HIT_RADIUS) {
+        // Hit if within hit radius OR step would overshoot (prevents orbit/dancing)
+        if (dist < PROJECTILE_HIT_RADIUS || step >= dist) {
             // Hit!
             if (p.isIntercept) {
                 // SAM intercept attempt
@@ -3122,8 +3143,8 @@ function updateProjectiles(dt) {
             Entities.projectiles.splice(i, 1);
         } else {
             // Advance projectile
-            p.x += (dx / dist) * p.speed * dt;
-            p.y += (dy / dist) * p.speed * dt;
+            p.x += (dx / dist) * step;
+            p.y += (dy / dist) * step;
         }
     }
 }
@@ -3142,8 +3163,10 @@ function updateEnemyProjectiles(dt) {
         const dx = t.x - p.x;
         const dy = t.y - p.y;
         const dist = Math.hypot(dx, dy);
+        const step = p.speed * dt;
 
-        if (dist < PROJECTILE_HIT_RADIUS) {
+        // Hit if within radius OR step would overshoot (prevents orbit/dancing)
+        if (dist < PROJECTILE_HIT_RADIUS || step >= dist) {
             // Hit! Apply damage
             t.hp -= p.dmg;
             spawnEffect(t.x, t.y, '#ff6600', 12, 0.3);
@@ -3152,8 +3175,8 @@ function updateEnemyProjectiles(dt) {
             }
             Entities.enemyProjectiles.splice(i, 1);
         } else {
-            p.x += (dx / dist) * p.speed * dt;
-            p.y += (dy / dist) * p.speed * dt;
+            p.x += (dx / dist) * step;
+            p.y += (dy / dist) * step;
         }
     }
 }
@@ -4259,6 +4282,8 @@ function startGame() {
     GameState.oil = STARTING_OIL_PRICE;
     GameState.funds = STARTING_FUNDS;
     GameState.wave = 1;
+    // Difficulty is set by button handlers before startGame is called
+    document.getElementById('ui-difficulty').innerText = GameState.difficulty.toUpperCase();
     toggleSidebar(); // Open sidebar on start
     updateUI();
 }
@@ -4269,6 +4294,23 @@ function init() {
     buildPathCaches();
 
     updateViewportTransform();
+
+    // Wire up difficulty selection buttons
+    document.querySelectorAll('.difficulty-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            GameState.difficulty = btn.dataset.diff;
+            document.querySelectorAll('.difficulty-btn').forEach(b => {
+                b.classList.remove('selected');
+                b.style.opacity = '0.6';
+                b.style.borderColor = '';
+                b.style.color = '';
+            });
+            btn.classList.add('selected');
+            btn.style.opacity = '1';
+            btn.style.borderColor = '#ffff33';
+            btn.style.color = '#ffff33';
+        });
+    });
 
     // Wire up intro button
     document.getElementById('btn-start').addEventListener('click', startGame);
