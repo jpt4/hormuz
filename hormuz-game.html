@@ -2181,11 +2181,11 @@ function drawF14Strike() {
 
     // Label
     ctx.fillStyle = '#ffffff';
-    ctx.font = '10px "Courier New", monospace';
+    setFont('10px "Courier New", monospace');
     ctx.textAlign = 'center';
     ctx.fillText('F-14 TOMCAT', x, y - 30);
 
-    ctx.restore();
+    ctx.restore(); _currentFont = '';
 }
 
 
@@ -3081,20 +3081,19 @@ function fireProjectile(unit, target) {
 }
 
 function updateProjectiles(dt) {
-    for (let i = Entities.projectiles.length - 1; i >= 0; i--) {
-        const p = Entities.projectiles[i];
-        if (!p.alive) {
-            Entities.projectiles.splice(i, 1);
-            continue;
-        }
+    const projs = Entities.projectiles;
+    let dst = 0;
+    for (let i = 0; i < projs.length; i++) {
+        const p = projs[i];
+        if (!p.alive) continue;
 
         const t = p.targetRef;
 
         // Target dead/gone? Remove projectile
         if (p.isIntercept) {
-            if (!t || t.hp <= 0) { Entities.projectiles.splice(i, 1); continue; }
+            if (!t || t.hp <= 0) continue;
         } else {
-            if (!t || !t.alive) { Entities.projectiles.splice(i, 1); continue; }
+            if (!t || !t.alive) continue;
         }
 
         // Move toward target
@@ -3139,26 +3138,27 @@ function updateProjectiles(dt) {
                     spawnEffect(t.x, t.y, '#ff3333', 30, 0.8);
                 }
             }
-
-            Entities.projectiles.splice(i, 1);
-        } else {
-            // Advance projectile
-            p.x += (dx / dist) * step;
-            p.y += (dy / dist) * step;
+            // Projectile consumed — don't keep it
+            continue;
         }
+
+        // Advance projectile and keep it
+        p.x += (dx / dist) * step;
+        p.y += (dy / dist) * step;
+        projs[dst++] = p;
     }
+    projs.length = dst;
 }
 
 function updateEnemyProjectiles(dt) {
-    for (let i = Entities.enemyProjectiles.length - 1; i >= 0; i--) {
-        const p = Entities.enemyProjectiles[i];
+    const eprojs = Entities.enemyProjectiles;
+    let dst = 0;
+    for (let i = 0; i < eprojs.length; i++) {
+        const p = eprojs[i];
         const t = p.targetRef;
 
         // Target dead? Remove projectile
-        if (!t || t.hp <= 0) {
-            Entities.enemyProjectiles.splice(i, 1);
-            continue;
-        }
+        if (!t || t.hp <= 0) continue;
 
         const dx = t.x - p.x;
         const dy = t.y - p.y;
@@ -3173,12 +3173,14 @@ function updateEnemyProjectiles(dt) {
             if (t.hp <= 0) {
                 spawnEffect(t.x, t.y, '#ff0000', 25, 0.6);
             }
-            Entities.enemyProjectiles.splice(i, 1);
-        } else {
-            p.x += (dx / dist) * step;
-            p.y += (dy / dist) * step;
+            continue; // consumed
         }
+
+        p.x += (dx / dist) * step;
+        p.y += (dy / dist) * step;
+        eprojs[dst++] = p;
     }
+    eprojs.length = dst;
 }
 
 /**
@@ -3243,13 +3245,12 @@ function updateCruiseMissiles(dt, isSetupPhase) {
         spawnCruiseMissile();
     }
 
-    // Update existing cruise missiles
-    for (let i = Entities.cruiseMissiles.length - 1; i >= 0; i--) {
-        const m = Entities.cruiseMissiles[i];
-        if (m.hp <= 0) {
-            Entities.cruiseMissiles.splice(i, 1);
-            continue;
-        }
+    // Update existing cruise missiles (compact-in-place, no splices)
+    const cms = Entities.cruiseMissiles;
+    let cdst = 0;
+    for (let i = 0; i < cms.length; i++) {
+        const m = cms[i];
+        if (m.hp <= 0) continue;
 
         const t = m.targetRef;
         // Retarget if target is dead
@@ -3259,7 +3260,6 @@ function updateCruiseMissiles(dt, isSetupPhase) {
                 m.targetRef = newTarget;
             } else {
                 // No valid targets — missile flies off
-                Entities.cruiseMissiles.splice(i, 1);
                 continue;
             }
         }
@@ -3282,12 +3282,14 @@ function updateCruiseMissiles(dt, isSetupPhase) {
                     spawnEffect(m.targetRef.x, m.targetRef.y, '#ff6600', 50, 1.2);
                 }
             }
-            Entities.cruiseMissiles.splice(i, 1);
-        } else {
-            m.x += (dx / dist) * CRUISE_MISSILE_SPEED * dt;
-            m.y += (dy / dist) * CRUISE_MISSILE_SPEED * dt;
+            continue; // consumed
         }
+
+        m.x += (dx / dist) * CRUISE_MISSILE_SPEED * dt;
+        m.y += (dy / dist) * CRUISE_MISSILE_SPEED * dt;
+        cms[cdst++] = m;
     }
+    cms.length = cdst;
 }
 
 function spawnCruiseMissile() {
@@ -3318,31 +3320,49 @@ function spawnCruiseMissile() {
  * Higher signature = more likely to be targeted.
  * Stealth units are immune.
  */
+// Cruise missile targeting cache — avoids per-call filter/map allocations
+let _cmTargetCache = null;  // { units: [], weights: [], totalWeight: 0, key: '' }
+
+function invalidateCMTargetCache() { _cmTargetCache = null; }
+
 function pickCruiseMissileTarget() {
-    const candidates = Entities.playerUnits.filter(u => u.hp > 0 && u.signature !== 'stealth');
-    if (candidates.length === 0) return null;
-
-    // Weight by signature
-    const weighted = candidates.map(u => {
-        let weight;
-        switch (u.signature) {
-            case 'heavy':  weight = SIGNATURE_WEIGHT_HEAVY; break;
-            case 'medium': weight = SIGNATURE_WEIGHT_MEDIUM; break;
-            case 'low':    weight = SIGNATURE_WEIGHT_LOW; break;
-            default:       weight = 0;
-        }
-        return { unit: u, weight };
-    });
-
-    const totalWeight = weighted.reduce((sum, w) => sum + w.weight, 0);
-    if (totalWeight === 0) return null;
-
-    let roll = Math.random() * totalWeight;
-    for (const w of weighted) {
-        roll -= w.weight;
-        if (roll <= 0) return w.unit;
+    // Build cache key from alive non-stealth unit count + total hp (changes on damage/death/placement)
+    const units = Entities.playerUnits;
+    let count = 0, hpSum = 0;
+    for (let i = 0; i < units.length; i++) {
+        if (units[i].hp > 0 && units[i].signature !== 'stealth') { count++; hpSum += units[i].hp; }
     }
-    return weighted[weighted.length - 1].unit;
+    const key = count + '|' + hpSum;
+
+    if (!_cmTargetCache || _cmTargetCache.key !== key) {
+        const cands = [];
+        const weights = [];
+        let totalWeight = 0;
+        for (let i = 0; i < units.length; i++) {
+            const u = units[i];
+            if (u.hp <= 0 || u.signature === 'stealth') continue;
+            let w;
+            switch (u.signature) {
+                case 'heavy':  w = SIGNATURE_WEIGHT_HEAVY; break;
+                case 'medium': w = SIGNATURE_WEIGHT_MEDIUM; break;
+                case 'low':    w = SIGNATURE_WEIGHT_LOW; break;
+                default:       w = 0;
+            }
+            cands.push(u);
+            weights.push(w);
+            totalWeight += w;
+        }
+        _cmTargetCache = { units: cands, weights, totalWeight, key };
+    }
+
+    if (_cmTargetCache.units.length === 0 || _cmTargetCache.totalWeight === 0) return null;
+
+    let roll = Math.random() * _cmTargetCache.totalWeight;
+    for (let i = 0; i < _cmTargetCache.units.length; i++) {
+        roll -= _cmTargetCache.weights[i];
+        if (roll <= 0) return _cmTargetCache.units[i];
+    }
+    return _cmTargetCache.units[_cmTargetCache.units.length - 1];
 }
 
 function updateFABPatrol(dt) {
@@ -3488,7 +3508,7 @@ function updateUSVs(dt) {
 
 function drawUSVs() {
     for (const usv of Entities.usvs) {
-        if (!usv.alive) continue;
+        if (!usv.alive || !inView(usv.x, usv.y, 20)) continue;
         ctx.save();
         ctx.shadowColor = '#888888';
         ctx.shadowBlur = 5;
@@ -3514,10 +3534,10 @@ function drawUSVs() {
 
         // Label
         ctx.fillStyle = '#888888';
-        ctx.font = '7px "Courier New", monospace';
+        setFont('7px "Courier New", monospace');
         ctx.textAlign = 'center';
         ctx.fillText('USV', usv.x, usv.y + 14);
-        ctx.restore();
+        ctx.restore(); _currentFont = '';
     }
 }
 
@@ -3721,8 +3741,29 @@ function getHighScores() {
      9. Visual effects              (explosions, flashes — on top)
    ==================================================================== */
 
+/** Font state tracking: avoid redundant ctx.font assignments */
+let _currentFont = '';
+function setFont(f) { if (f !== _currentFont) { ctx.font = f; _currentFont = f; } }
+
+/** Viewport culling: compute visible rect in game coords, updated each frame */
+let _viewL = 0, _viewT = 0, _viewR = MAP_WIDTH, _viewB = MAP_HEIGHT;
+function updateViewRect() {
+    if (!_containerRect) updateContainerRect();
+    _viewL = -panX / zoom;
+    _viewT = -panY / zoom;
+    _viewR = _viewL + _containerRect.width / zoom;
+    _viewB = _viewT + _containerRect.height / zoom;
+}
+/** Check if a point is within the visible viewport (with margin for glow/size) */
+function inView(x, y, margin) {
+    return x >= _viewL - margin && x <= _viewR + margin &&
+           y >= _viewT - margin && y <= _viewB + margin;
+}
+
 function draw() {
     ctx.clearRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
+    updateViewRect();
+    _currentFont = '';  // Reset font tracking each frame
 
     // --- Range circles for selected unit type (placement preview) ---
     if (GameState.selectedUnitType !== -1) {
@@ -3737,15 +3778,44 @@ function draw() {
     drawUSVs();
 
     // --- Enemies ---
-    Entities.enemies.forEach(e => {
-        if (!e.alive) return;
+    for (let i = 0; i < Entities.enemies.length; i++) {
+        const e = Entities.enemies[i];
+        if (!e.alive || !inView(e.x, e.y, 60)) continue;
         drawEnemy(e);
-    });
+    }
+
+    // --- Batched range circles (one setLineDash call per style) ---
+    {
+        const selUnit = GameState.selectedPlacedUnit;
+        // Unselected range circles
+        ctx.strokeStyle = 'rgba(0, 255, 255, 0.18)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([8, 8]);
+        for (let i = 0; i < Entities.playerUnits.length; i++) {
+            const u = Entities.playerUnits[i];
+            if (u === selUnit || !inView(u.x, u.y, u.range + 40)) continue;
+            ctx.beginPath();
+            ctx.arc(u.x, u.y, u.range, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        // Selected unit range circle
+        if (selUnit && inView(selUnit.x, selUnit.y, selUnit.range + 40)) {
+            ctx.strokeStyle = 'rgba(0, 255, 255, 0.45)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.arc(selUnit.x, selUnit.y, selUnit.range, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        ctx.setLineDash([]);
+    }
 
     // --- Player units ---
-    Entities.playerUnits.forEach(u => {
+    for (let i = 0; i < Entities.playerUnits.length; i++) {
+        const u = Entities.playerUnits[i];
+        if (!inView(u.x, u.y, u.range + 40)) continue;
         drawPlayerUnit(u);
-    });
+    }
 
     // --- Projectiles ---
     drawProjectiles();
@@ -3785,7 +3855,7 @@ function drawEnemy(e) {
     ctx.fillStyle = hpFrac > 0.5 ? '#ff3333' : hpFrac > 0.25 ? '#ff6600' : '#ffff00';
     ctx.fillRect(e.x - barW / 2, barY, barW * hpFrac, 4);
 
-    ctx.restore();
+    ctx.restore(); _currentFont = '';
 }
 
 function drawTanker(e) {
@@ -3814,7 +3884,7 @@ function drawTanker(e) {
 
     // Size indicator text
     ctx.fillStyle = '#ff3333';
-    ctx.font = `${10 * size}px "Courier New", monospace`;
+    setFont(`${10 * size}px "Courier New", monospace`);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const label = e.type === 'tanker-large' ? 'VLCC' : e.type === 'tanker-med' ? 'MED' : 'SML';
@@ -3848,7 +3918,7 @@ function drawDestroyer(e) {
 
     // Label
     ctx.fillStyle = '#ffaa00';
-    ctx.font = '9px "Courier New", monospace';
+    setFont('9px "Courier New", monospace');
     ctx.textAlign = 'center';
     ctx.fillText('DDG', e.x, e.y + 22);
 }
@@ -3876,7 +3946,7 @@ function drawF35(e) {
     ctx.stroke();
 
     ctx.fillStyle = '#ff33ff';
-    ctx.font = '8px "Courier New", monospace';
+    setFont('8px "Courier New", monospace');
     ctx.textAlign = 'center';
     ctx.fillText('F-35', e.x, e.y + 22);
 }
@@ -3890,15 +3960,8 @@ function drawPlayerUnit(u) {
     ctx.save();
     const def = UNIT_DEFS[u.defId];
 
-    // Range circles always visible for all units
+    // Range circles drawn in batched pass in draw() — skip here
     const isSelected = u === GameState.selectedPlacedUnit;
-    ctx.strokeStyle = isSelected ? 'rgba(0, 255, 255, 0.45)' : 'rgba(0, 255, 255, 0.18)';
-    ctx.lineWidth = isSelected ? 2 : 1;
-    ctx.setLineDash(isSelected ? [4, 4] : [8, 8]);
-    ctx.beginPath();
-    ctx.arc(u.x, u.y, u.range, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
 
     // Selected unit: pulsing highlight box
     if (isSelected) {
@@ -3947,12 +4010,12 @@ function drawPlayerUnit(u) {
     // Tier indicator
     if (u.tier > 0) {
         ctx.fillStyle = '#ffff33';
-        ctx.font = '10px "Courier New", monospace';
+        setFont('10px "Courier New", monospace');
         ctx.textAlign = 'center';
         ctx.fillText('★'.repeat(u.tier), u.x, u.y + 32);
     }
 
-    ctx.restore();
+    ctx.restore(); _currentFont = '';
 }
 
 // --- Individual unit drawing functions ---
@@ -3978,7 +4041,7 @@ function drawUnitBattery(u) {
 
     // Label
     ctx.fillStyle = '#ffff33';
-    ctx.font = '9px "Courier New", monospace';
+    setFont('9px "Courier New", monospace');
     ctx.textAlign = 'center';
     ctx.fillText('BATT', u.x, u.y + 3);
 }
@@ -4010,7 +4073,7 @@ function drawUnitSAM(u) {
     ctx.stroke();
 
     ctx.fillStyle = '#33ff33';
-    ctx.font = '8px "Courier New", monospace';
+    setFont('8px "Courier New", monospace');
     ctx.textAlign = 'center';
     ctx.fillText('SAM', u.x, u.y + 3);
 }
@@ -4047,7 +4110,7 @@ function drawUnitDrone(u) {
     // Strike counter
     if (u.attritable) {
         ctx.fillStyle = '#00ffff';
-        ctx.font = '9px "Courier New", monospace';
+        setFont('9px "Courier New", monospace');
         ctx.textAlign = 'center';
         ctx.fillText(`${u.strikesRemaining}`, u.x, u.y + 4);
     }
@@ -4073,7 +4136,7 @@ function drawUnitMinelayer(u) {
     ctx.fill();
 
     ctx.fillStyle = '#ffaa00';
-    ctx.font = '7px "Courier New", monospace';
+    setFont('7px "Courier New", monospace');
     ctx.textAlign = 'center';
     ctx.fillText('MNL', u.x, u.y + 28);
 }
@@ -4135,7 +4198,7 @@ function drawUnitSub(u) {
 
     // Stealth indicator
     ctx.fillStyle = '#888888';
-    ctx.font = '7px "Courier New", monospace';
+    setFont('7px "Courier New", monospace');
     ctx.textAlign = 'center';
     ctx.fillText('SUB', u.x, u.y + 4);
 
@@ -4154,69 +4217,43 @@ function drawUnitSub(u) {
    ==================================================================== */
 
 function drawProjectiles() {
-    // Player projectiles (white/cyan)
-    Entities.projectiles.forEach(p => {
-        ctx.save();
-        ctx.shadowColor = '#ffffff';
-        ctx.shadowBlur = 6;
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-    });
+    // Player projectiles — pre-rendered sprite (no shadowBlur per frame)
+    const pp = _glowSprites.playerProj;
+    const ppOx = pp.width / 2, ppOy = pp.height / 2;
+    for (let i = 0; i < Entities.projectiles.length; i++) {
+        const p = Entities.projectiles[i];
+        if (inView(p.x, p.y, 12)) ctx.drawImage(pp, p.x - ppOx, p.y - ppOy);
+    }
 
-    // Enemy projectiles (orange/red)
-    Entities.enemyProjectiles.forEach(p => {
-        ctx.save();
-        ctx.shadowColor = '#ffaa00';
-        ctx.shadowBlur = 6;
-        ctx.fillStyle = '#ffaa00';
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-    });
+    // Enemy projectiles — pre-rendered sprite
+    const ep = _glowSprites.enemyProj;
+    const epOx = ep.width / 2, epOy = ep.height / 2;
+    for (let i = 0; i < Entities.enemyProjectiles.length; i++) {
+        const p = Entities.enemyProjectiles[i];
+        if (inView(p.x, p.y, 12)) ctx.drawImage(ep, p.x - epOx, p.y - epOy);
+    }
 }
 
 function drawCruiseMissiles() {
-    Entities.cruiseMissiles.forEach(m => {
-        ctx.save();
-        ctx.shadowColor = '#ff0000';
-        ctx.shadowBlur = 12;
-        ctx.fillStyle = '#ff0000';
-        // Triangle pointing toward target
-        ctx.beginPath();
-        ctx.moveTo(m.x, m.y - 8);
-        ctx.lineTo(m.x - 5, m.y + 8);
-        ctx.lineTo(m.x + 5, m.y + 8);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
-    });
+    const sp = _glowSprites.cruiseMissile;
+    const ox = sp.width / 2, oy = sp.height / 2;
+    for (let i = 0; i < Entities.cruiseMissiles.length; i++) {
+        const m = Entities.cruiseMissiles[i];
+        if (inView(m.x, m.y, 20)) ctx.drawImage(sp, m.x - ox, m.y - oy);
+    }
 }
 
 function drawMines() {
-    Entities.mines.forEach(m => {
-        if (!m.active) return; // Don't draw detonated mines
-        ctx.save();
-        // Pulsing red dot
+    const sprites = _glowSprites.mine;
+    const ox = sprites[0].width / 2, oy = sprites[0].height / 2;
+    for (let i = 0; i < Entities.mines.length; i++) {
+        const m = Entities.mines[i];
+        if (!m.active || !inView(m.x, m.y, 16)) continue;
+        // Map continuous pulse to nearest pre-rendered sprite (4 levels)
         const pulse = 0.5 + 0.5 * Math.sin(GameState.totalTime * 3 + m.x);
-        ctx.shadowColor = '#ff0000';
-        ctx.shadowBlur = 8 * pulse;
-        ctx.fillStyle = `rgba(255, 0, 0, ${0.4 + 0.4 * pulse})`;
-        ctx.beginPath();
-        ctx.arc(m.x, m.y, 6, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Outer ring
-        ctx.strokeStyle = `rgba(255, 0, 0, ${0.3 * pulse})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(m.x, m.y, 12, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-    });
+        const idx = Math.min(3, (pulse * 3 + 0.5) | 0);
+        ctx.drawImage(sprites[idx], m.x - ox, m.y - oy);
+    }
 }
 
 /** Age and compact effects array — called from update() with real dt */
@@ -4234,6 +4271,7 @@ function drawEffects() {
     // Visual effects (explosions, flashes) — pure rendering, no mutation
     for (let i = 0; i < Entities.effects.length; i++) {
         const fx = Entities.effects[i];
+        if (!inView(fx.x, fx.y, fx.radius * 2 + 15)) continue;
         const alpha = 1 - (fx.age / fx.duration);
         const radius = fx.radius * (1 + fx.age / fx.duration);
 
@@ -4246,7 +4284,7 @@ function drawEffects() {
         ctx.beginPath();
         ctx.arc(fx.x, fx.y, radius, 0, Math.PI * 2);
         ctx.stroke();
-        ctx.restore();
+        ctx.restore(); _currentFont = '';
     }
 }
 
@@ -4288,10 +4326,79 @@ function startGame() {
     updateUI();
 }
 
+/* Pre-rendered glow sprites — one-time init, eliminates per-entity shadowBlur */
+const _glowSprites = {};
+function buildGlowSprites() {
+    // Helper: render a shape with shadowBlur onto an offscreen canvas, return it
+    function makeSprite(w, h, drawFn) {
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        const g = c.getContext('2d');
+        drawFn(g, w, h);
+        return c;
+    }
+
+    // Player projectile: white dot r=4, shadowBlur=6
+    _glowSprites.playerProj = makeSprite(24, 24, (g, w, h) => {
+        g.shadowColor = '#ffffff';
+        g.shadowBlur = 6;
+        g.fillStyle = '#ffffff';
+        g.beginPath();
+        g.arc(w / 2, h / 2, 4, 0, Math.PI * 2);
+        g.fill();
+    });
+
+    // Enemy projectile: orange dot r=3, shadowBlur=6
+    _glowSprites.enemyProj = makeSprite(22, 22, (g, w, h) => {
+        g.shadowColor = '#ffaa00';
+        g.shadowBlur = 6;
+        g.fillStyle = '#ffaa00';
+        g.beginPath();
+        g.arc(w / 2, h / 2, 3, 0, Math.PI * 2);
+        g.fill();
+    });
+
+    // Cruise missile: red triangle, shadowBlur=12
+    _glowSprites.cruiseMissile = makeSprite(34, 40, (g, w, h) => {
+        g.shadowColor = '#ff0000';
+        g.shadowBlur = 12;
+        g.fillStyle = '#ff0000';
+        g.beginPath();
+        g.moveTo(w / 2, 4);
+        g.lineTo(w / 2 - 5, 28);
+        g.lineTo(w / 2 + 5, 28);
+        g.closePath();
+        g.fill();
+    });
+
+    // Mine pulse sprites: 4 levels (pulse = 0.0, 0.33, 0.67, 1.0)
+    _glowSprites.mine = [];
+    for (let p = 0; p < 4; p++) {
+        const pulse = p / 3;
+        _glowSprites.mine.push(makeSprite(36, 36, (g, w, h) => {
+            const cx = w / 2, cy = h / 2;
+            g.shadowColor = '#ff0000';
+            g.shadowBlur = 8 * pulse;
+            g.fillStyle = `rgba(255, 0, 0, ${0.4 + 0.4 * pulse})`;
+            g.beginPath();
+            g.arc(cx, cy, 6, 0, Math.PI * 2);
+            g.fill();
+            // Outer ring
+            g.shadowBlur = 0;
+            g.strokeStyle = `rgba(255, 0, 0, ${0.3 * pulse})`;
+            g.lineWidth = 1;
+            g.beginPath();
+            g.arc(cx, cy, 12, 0, Math.PI * 2);
+            g.stroke();
+        }));
+    }
+}
+
 function init() {
     // Build performance caches (one-time cost at startup)
     buildLandGrid();
     buildPathCaches();
+    buildGlowSprites();
 
     updateViewportTransform();
 
