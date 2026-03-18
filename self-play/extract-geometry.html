@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hormuz Geometry Extractor</title>
+    <style>
+        body { background: #111; color: #0ff; font-family: monospace; padding: 20px; }
+        button { background: #0ff; color: #000; border: none; padding: 10px 20px; cursor: pointer; font-family: monospace; font-size: 16px; }
+        pre { max-height: 300px; overflow: auto; background: #000; padding: 10px; border: 1px solid #0ff; }
+        #status { margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <h1>HORMUZ GEOMETRY EXTRACTOR</h1>
+    <p>This utility extracts the land grid and shipping lane path caches from the game SVG,
+    so the headless simulation engine can run without any DOM/SVG dependencies.</p>
+
+    <!-- Embed the same SVG structure as hormuz-game.html -->
+    <svg id="tactical-svg" viewBox="0 0 2400 1680" width="0" height="0" style="position:absolute;visibility:hidden;">
+        <defs>
+            <pattern id="crosshatch" width="18" height="18" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+                <line x1="0" y1="0" x2="0" y2="18" stroke="#00ffff" stroke-width="2" opacity="0.25" />
+            </pattern>
+        </defs>
+
+        <!-- Iranian coastline -->
+        <path id="iran-coast" d="M -24,-24 L 2424,-24 L 2424,1320 L 2040,1008 L 1752,456 L 1248,372 L 768,624 L -24,312 Z"
+              fill="url(#crosshatch)" stroke="#00ffff" stroke-width="4" />
+
+        <!-- Arabian coastline -->
+        <path id="arabia-coast" d="M -24,1704 L 2424,1704 L 2424,1680 L 1920,1632 L 1440,1320 L 1404,720 L 1236,864 L 1008,1080 L 720,1224 L 360,1320 L -24,1344 Z"
+              fill="url(#crosshatch)" stroke="#00ffff" stroke-width="4" />
+
+        <!-- Islands -->
+        <polygon id="island-qeshm" points="950,570 1230,440 1260,500 980,640" fill="url(#crosshatch)" stroke="#00ffff" stroke-width="3" />
+        <circle id="island-larak" cx="1340" cy="560" r="25" fill="url(#crosshatch)" stroke="#00ffff" stroke-width="3" />
+        <circle id="island-hormuz" cx="1420" cy="450" r="28" fill="url(#crosshatch)" stroke="#00ffff" stroke-width="3" />
+        <circle id="island-gtunb" cx="850" cy="740" r="22" fill="url(#crosshatch)" stroke="#00ffff" stroke-width="3" />
+        <circle id="island-ltunb" cx="790" cy="770" r="16" fill="url(#crosshatch)" stroke="#00ffff" stroke-width="3" />
+        <circle id="island-abumusa" cx="750" cy="880" r="25" fill="url(#crosshatch)" stroke="#00ffff" stroke-width="3" />
+        <circle id="island-sirri" cx="580" cy="940" r="22" fill="url(#crosshatch)" stroke="#00ffff" stroke-width="3" />
+        <ellipse id="island-kish" cx="240" cy="920" rx="50" ry="25" fill="url(#crosshatch)" stroke="#00ffff" stroke-width="3" />
+
+        <!-- Shipping lanes -->
+        <path id="lane-tr7" d="M 120,1080 L 600,912 L 960,720 L 1272,600 L 1632,840 L 2280,1392" fill="none" stroke="#00ffaa" stroke-width="4" />
+        <path id="lane-north" d="M 120,720 L 480,600 L 840,480 L 1200,420 L 1500,600 L 1800,840 L 2280,1200" fill="none" stroke="#00ffaa" stroke-width="4" />
+        <path id="lane-south" d="M 120,1320 L 480,1200 L 840,1080 L 1200,900 L 1500,840 L 1800,960 L 2280,1440" fill="none" stroke="#00ffaa" stroke-width="4" />
+    </svg>
+
+    <div id="status">Click the button to extract geometry data.</div>
+    <button onclick="extract()">EXTRACT GEOMETRY</button>
+    <button onclick="download()" id="btn-download" style="display:none; margin-left:10px;">DOWNLOAD JSON</button>
+    <pre id="output"></pre>
+
+    <script>
+        const MAP_WIDTH = 2400;
+        const MAP_HEIGHT = 1680;
+        const LAND_GRID_CELL = 8;
+        const PATH_CACHE_STEP = 2;
+
+        let extractedData = null;
+
+        function extract() {
+            const status = document.getElementById('status');
+            const output = document.getElementById('output');
+
+            status.textContent = 'Extracting land grid...';
+
+            const svgEl = document.getElementById('tactical-svg');
+            const iranCoast = document.getElementById('iran-coast');
+            const arabiaCoast = document.getElementById('arabia-coast');
+            const islandElements = [
+                document.getElementById('island-qeshm'),
+                document.getElementById('island-larak'),
+                document.getElementById('island-hormuz'),
+                document.getElementById('island-gtunb'),
+                document.getElementById('island-ltunb'),
+                document.getElementById('island-abumusa'),
+                document.getElementById('island-sirri'),
+                document.getElementById('island-kish'),
+            ];
+
+            // Build land grid
+            const landGridCols = Math.ceil(MAP_WIDTH / LAND_GRID_CELL);
+            const landGridRows = Math.ceil(MAP_HEIGHT / LAND_GRID_CELL);
+            const landGrid = new Uint8Array(landGridCols * landGridRows);
+
+            const pt = svgEl.createSVGPoint();
+            for (let row = 0; row < landGridRows; row++) {
+                pt.y = row * LAND_GRID_CELL + LAND_GRID_CELL / 2;
+                for (let col = 0; col < landGridCols; col++) {
+                    pt.x = col * LAND_GRID_CELL + LAND_GRID_CELL / 2;
+                    if (iranCoast.isPointInFill(pt)) {
+                        landGrid[row * landGridCols + col] = 1;
+                    } else if (arabiaCoast.isPointInFill(pt)) {
+                        landGrid[row * landGridCols + col] = 2;
+                    } else {
+                        for (const island of islandElements) {
+                            if (island.isPointInFill(pt)) {
+                                landGrid[row * landGridCols + col] = 3;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            status.textContent = 'Extracting path caches...';
+
+            // Build path caches
+            const lanePaths = {
+                'lane-tr7': document.getElementById('lane-tr7'),
+                'lane-north': document.getElementById('lane-north'),
+                'lane-south': document.getElementById('lane-south'),
+            };
+
+            const pathCacheData = {};
+            for (const [pathId, pathEl] of Object.entries(lanePaths)) {
+                if (!pathEl) continue;
+                const totalLen = pathEl.getTotalLength();
+                const numPoints = Math.ceil(totalLen / PATH_CACHE_STEP) + 1;
+                const cache = new Float32Array(numPoints * 2);
+                for (let i = 0; i < numPoints; i++) {
+                    const d = Math.min(i * PATH_CACHE_STEP, totalLen);
+                    const p = pathEl.getPointAtLength(d);
+                    cache[i * 2] = p.x;
+                    cache[i * 2 + 1] = p.y;
+                }
+                pathCacheData[pathId] = {
+                    data: Array.from(cache),
+                    totalLength: totalLen,
+                    numPoints: numPoints,
+                };
+            }
+
+            // Encode landGrid as regular array (compact enough)
+            extractedData = {
+                landGrid: Array.from(landGrid),
+                landGridCols,
+                landGridRows,
+                pathCache: pathCacheData,
+                meta: {
+                    mapWidth: MAP_WIDTH,
+                    mapHeight: MAP_HEIGHT,
+                    gridCell: LAND_GRID_CELL,
+                    pathStep: PATH_CACHE_STEP,
+                    extractedAt: new Date().toISOString(),
+                }
+            };
+
+            const jsonStr = JSON.stringify(extractedData);
+            const landCells = landGrid.reduce((a, v) => a + (v > 0 ? 1 : 0), 0);
+            const pathPoints = Object.values(pathCacheData).reduce((a, v) => a + v.numPoints, 0);
+
+            status.textContent = `Extraction complete! Grid: ${landGridCols}x${landGridRows} (${landCells} land cells). Paths: ${Object.keys(pathCacheData).length} lanes, ${pathPoints} total waypoints. JSON: ${(jsonStr.length / 1024).toFixed(1)} KB`;
+
+            output.textContent = JSON.stringify(extractedData.meta, null, 2) + '\n\n' +
+                `Land grid: ${landGridCols} x ${landGridRows} = ${landGrid.length} cells\n` +
+                `  Iran cells: ${landGrid.filter(v => v === 1).length}\n` +
+                `  Arabia cells: ${landGrid.filter(v => v === 2).length}\n` +
+                `  Island cells: ${landGrid.filter(v => v === 3).length}\n` +
+                `  Water cells: ${landGrid.filter(v => v === 0).length}\n\n` +
+                Object.entries(pathCacheData).map(([id, pc]) =>
+                    `Path ${id}: ${pc.numPoints} points, length ${pc.totalLength.toFixed(1)}`
+                ).join('\n');
+
+            document.getElementById('btn-download').style.display = 'inline-block';
+        }
+
+        function download() {
+            if (!extractedData) return;
+            const blob = new Blob([JSON.stringify(extractedData)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'geometry-data.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
