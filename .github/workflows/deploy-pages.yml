@@ -1,0 +1,109 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [master, self-play]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout master (canonical)
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          path: master
+
+      - name: Checkout self-play (testing)
+        uses: actions/checkout@v4
+        with:
+          ref: self-play
+          path: self-play
+        continue-on-error: true
+
+      - name: Assemble site
+        run: |
+          mkdir -p _site/testing
+
+          # --- Canonical build (master, no balance overrides) ---
+          cp master/hormuz-game.html _site/
+          # Canonical uses empty overrides (original game balance)
+          echo 'window.__BALANCE_OVERRIDES = {};' > _site/balance-config.js
+
+          # Landing page
+          cat > _site/index.html << 'LANDING'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <title>Hormuz — Strait of Hormuz Defense</title>
+              <style>
+                  body { background: #010a15; color: #00ffff; font-family: 'Courier New', monospace; padding: 2em; max-width: 700px; margin: 0 auto; }
+                  a { color: #00ffff; }
+                  a:hover { color: #fff; }
+                  h1 { border-bottom: 1px solid #00ffff33; padding-bottom: 0.5em; }
+                  .variant { margin: 1.5em 0; padding: 1em; border: 1px solid #00ffff33; }
+                  .variant h2 { margin-top: 0; }
+                  .note { color: #00ffff88; font-size: 0.85em; }
+              </style>
+          </head>
+          <body>
+              <h1>W.O.P.R. — STRAIT OF HORMUZ DEFENSE</h1>
+              <div class="variant">
+                  <h2><a href="hormuz-game.html">&#9654; Canonical Game</a></h2>
+                  <p>Original game balance — the hand-tuned release version.</p>
+              </div>
+              <div class="variant">
+                  <h2><a href="testing/">&#9654; Experimental Balance (Testing)</a></h2>
+                  <p>Evolutionary self-play tuning applied. Stats adjusted by autonomous balance loop to encourage diverse, sophisticated strategies.</p>
+                  <p class="note">Balance may change — this build updates automatically when the self-play system runs.</p>
+              </div>
+              <p class="note" style="margin-top: 2em;">Source: <a href="https://github.com/jpt4/hormuz">github.com/jpt4/hormuz</a></p>
+          </body>
+          </html>
+          LANDING
+
+          # --- Testing build (self-play, with balance overrides) ---
+          if [ -d self-play ]; then
+            cp self-play/hormuz-game.html _site/testing/
+            cp self-play/balance-config.js _site/testing/
+
+            # Testing index
+            cat > _site/testing/index.html << 'TESTING'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head><meta charset="UTF-8"><meta http-equiv="refresh" content="0; url=hormuz-game.html"><title>Hormuz Testing Build</title></head>
+          <body style="background:#010a15;color:#00ffff;font-family:monospace;padding:2em;">
+          <p>Redirecting to <a href="hormuz-game.html" style="color:#00ffff;">testing build</a>...</p>
+          </body>
+          </html>
+          TESTING
+          else
+            echo '<html><body style="background:#010a15;color:#00ffff;font-family:monospace;padding:2em;"><p>Testing build not yet available. <a href="../" style="color:#00ffff;">Play canonical version</a>.</p></body></html>' > _site/testing/index.html
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
