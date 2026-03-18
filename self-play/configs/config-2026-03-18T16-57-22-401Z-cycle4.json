@@ -1,0 +1,34 @@
+{
+  "overrides": {
+    "UNIT_DEFS[0].dps": 61,
+    "UNIT_DEFS[0].hp": 454,
+    "UNIT_DEFS[0].cooldown": 2.3,
+    "UNIT_DEFS[0].cost": 238,
+    "UNIT_DEFS[2].dps": 78,
+    "UNIT_DEFS[2].cooldown": 5.3,
+    "UNIT_DEFS[3].dps": 230,
+    "UNIT_DEFS[3].cooldown": 11,
+    "UNIT_DEFS[4].dps": 10,
+    "UNIT_DEFS[4].cooldown": 1.5,
+    "UNIT_DEFS[4].hp": 76,
+    "UNIT_DEFS[5].dps": 59,
+    "UNIT_DEFS[5].cooldown": 2.6,
+    "WAVE_HP_SCALING": 0.07,
+    "WAVE_SPEED_SCALING": 0.055,
+    "WAVE_INCOME_BASE": 6,
+    "UNIT_DEFS[1].hp": 210,
+    "UNIT_DEFS[2].hp": 63,
+    "UNIT_DEFS[3].hp": 263,
+    "UNIT_DEFS[5].hp": 189,
+    "UPGRADE_COST_MULTIPLIER": 1.3499999999999999
+  },
+  "metadata": {
+    "cycle": 4,
+    "winRate": "35.0",
+    "diversity": "70",
+    "typesUsed": "4.8",
+    "archetypes": 3,
+    "balanced": true,
+    "timestamp": "2026-03-18T16:57:22.402Z"
+  }
+}
