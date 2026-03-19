@@ -1,5 +1,5 @@
 {
-  "constantOverrides": {
+  "overrides": {
     "UNIT_DEFS[0].dps": 61,
     "UNIT_DEFS[0].hp": 454,
     "UNIT_DEFS[0].cooldown": 2.3,
@@ -22,7 +22,13 @@
     "UNIT_DEFS[5].hp": 189,
     "UPGRADE_COST_MULTIPLIER": 1.3499999999999999
   },
-  "timestamp": "2026-03-19T11:07:57.648Z",
-  "cycle": 4,
-  "balanced": true
+  "metadata": {
+    "cycle": 4,
+    "winRate": "35.0",
+    "diversity": "70",
+    "typesUsed": "4.8",
+    "archetypes": 3,
+    "balanced": true,
+    "timestamp": "2026-03-19T11:07:57.646Z"
+  }
 }
