@@ -1,0 +1,2 @@
+# npm (no external deps yet; lockfile is committed for CI reproducibility)
+node_modules/

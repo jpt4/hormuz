@@ -1,0 +1,26 @@
+{
+  "overrides": {
+    "UNIT_DEFS[0].dps": 61,
+    "UNIT_DEFS[0].hp": 432,
+    "UNIT_DEFS[0].cooldown": 2.3,
+    "UNIT_DEFS[0].cost": 238,
+    "UNIT_DEFS[2].dps": 92,
+    "UNIT_DEFS[2].cooldown": 4.4,
+    "UNIT_DEFS[3].dps": 230,
+    "UNIT_DEFS[3].cooldown": 11,
+    "UNIT_DEFS[4].dps": 12,
+    "UNIT_DEFS[4].cooldown": 1.3,
+    "UNIT_DEFS[4].hp": 72,
+    "UNIT_DEFS[5].dps": 64,
+    "UNIT_DEFS[5].cooldown": 2.4
+  },
+  "metadata": {
+    "cycle": 1,
+    "winRate": "43.3",
+    "diversity": "68",
+    "typesUsed": "4.7",
+    "archetypes": 5,
+    "balanced": false,
+    "timestamp": "2026-03-19T09:30:53.173Z"
+  }
+}

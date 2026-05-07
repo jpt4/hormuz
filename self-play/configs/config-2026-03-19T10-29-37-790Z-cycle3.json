@@ -24,12 +24,12 @@
     "UPGRADE_COST_FRACTION_TIER2": 0.36
   },
   "metadata": {
-    "cycle": 4,
-    "winRate": "35.0",
-    "diversity": "70",
-    "typesUsed": "4.8",
-    "archetypes": 3,
-    "balanced": true,
-    "timestamp": "2026-03-18T16:33:45.793Z"
+    "cycle": 3,
+    "winRate": "0.0",
+    "diversity": "79",
+    "typesUsed": "4.9",
+    "archetypes": 7,
+    "balanced": false,
+    "timestamp": "2026-03-19T10:29:37.790Z"
   }
 }

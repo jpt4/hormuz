@@ -1,0 +1,14 @@
+{
+  "name": "hormuz",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Strait of Hormuz tower defense — browser game and Node self-play balance tooling",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "test": "node --test self-play/test/*.test.js",
+    "test:extended": "node self-play/run.js test",
+    "test:all": "npm run test && npm run test:extended"
+  }
+}

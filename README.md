@@ -36,3 +36,27 @@ Convergence target ("edge of chaos"): 20-60% win rate, 4+ unit types in top stra
 ## Contributing
 
 Gameplay, visual/audio, performance, etc. improvements welcome, as is commentary/critique.
+
+### Engineering policy
+
+Development practices for this repository are described in **`AGENTS.md`** (TDD, ADRs before new features, documentation layers). Quick orientation:
+
+| Document | Purpose |
+|----------|---------|
+| `AGENTS.md` | Mandatory practices |
+| `DESIGN.md` | Game design specification |
+| `docs/COVERAGE.md` | What tests cover and known gaps |
+| `docs/adr/` | Architecture Decision Records |
+| `LOG.md` / `MEMORY.md` / `LESSONS.md` | Chronological log, durable facts, lessons |
+
+### Tests
+
+```bash
+npm ci          # install deps (none yet; lockfile for CI reproducibility)
+npm test        # fast suite — Node contract tests for self-play + bounded VM smoke
+npm run test:extended   # slower — full headless game smoke (self-play/run.js)
+```
+
+The playable HTML file also includes an **in-browser regression suite** (Ctrl+T, runs on load).
+
+Before commits that change game logic used by the headless engine or self-play pipeline, run **`npm run test:extended`** locally (see `docs/COVERAGE.md`).

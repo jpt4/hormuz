@@ -20,7 +20,10 @@
     "UNIT_DEFS[2].hp": 63,
     "UNIT_DEFS[3].hp": 263,
     "UNIT_DEFS[5].hp": 189,
-    "UPGRADE_COST_MULTIPLIER": 1.3499999999999999
+    "UPGRADE_COST_FRACTION_TIER1": 0.30,
+    "UPGRADE_COST_FRACTION_TIER2": 0.36
   },
-  "timestamp": "2026-03-18T16:09:08.577Z"
+  "timestamp": "2026-03-19T11:07:57.648Z",
+  "cycle": 4,
+  "balanced": true
 }
