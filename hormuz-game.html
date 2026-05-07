@@ -709,7 +709,7 @@
             </ul>
 
             <h3>UPGRADE SYSTEM</h3>
-            <div style="opacity: 0.7; font-size: 12px; margin-bottom: 8px;">Select a placed unit and press [U] to upgrade. Each tier costs base price &times; 1.4<sup>tier</sup>. Upgrades are permanent and cumulative.</div>
+            <div style="opacity: 0.7; font-size: 12px; margin-bottom: 8px;">Select a placed unit and press [U] to upgrade. Each upgrade costs a <strong>fraction of that unit&rsquo;s base build price</strong> (tier 2 slightly more than tier 1). Upgrades are permanent and cumulative.</div>
             <table>
                 <thead><tr><th>UNIT</th><th>TIER 1</th><th>TIER 2</th></tr></thead>
                 <tbody>
@@ -1189,8 +1189,11 @@ const UNIT_DEFS = [
     }
 ];
 
-// Upgrade cost multiplier (each tier multiplies previous cost by this)
-let UPGRADE_COST_MULTIPLIER = 1.4;       // let: rebalancer-overridable
+// Upgrade gold cost = (base shop price `def.cost`) × a per-tier fraction — NOT a
+// compounding multiplier stack on the previous tier. Tuned low so upgrades are
+// economically reachable mid-game. Rebalancer may adjust each fraction independently.
+let UPGRADE_COST_FRACTION_TIER1 = 0.32;  // 0→1  (let: rebalancer-overridable)
+let UPGRADE_COST_FRACTION_TIER2 = 0.38;  // 1→2
 
 // --- PATROL DEFAULTS (informational — actual values are in UNIT_DEFS) ---
 // FAB: patrolRadius=200, patrolSpeed=120
@@ -1225,7 +1228,8 @@ if (!HEADLESS && typeof window !== 'undefined' && window.__BALANCE_OVERRIDES) {
             else if (key === 'WAVE_SPEED_SCALING') WAVE_SPEED_SCALING = value;
             else if (key === 'WAVE_INCOME_BASE') WAVE_INCOME_BASE = value;
             else if (key === 'CRUISE_MISSILE_BASE_RATE') CRUISE_MISSILE_BASE_RATE = value;
-            else if (key === 'UPGRADE_COST_MULTIPLIER') UPGRADE_COST_MULTIPLIER = value;
+            else if (key === 'UPGRADE_COST_FRACTION_TIER1') UPGRADE_COST_FRACTION_TIER1 = value;
+            else if (key === 'UPGRADE_COST_FRACTION_TIER2') UPGRADE_COST_FRACTION_TIER2 = value;
             else if (key === 'STARTING_FUNDS') STARTING_FUNDS = value;
         } catch (_) {}
     }
@@ -1930,7 +1934,7 @@ function upgradeUnit(unit) {
     if (unit.tier >= def.upgrades.length) return false; // max tier
 
     const upgrade = def.upgrades[unit.tier];
-    const cost = Math.round(def.cost * Math.pow(UPGRADE_COST_MULTIPLIER, unit.tier + 1));
+    const cost = computeUpgradeGoldCost(def, unit.tier);
 
     if (GameState.funds < cost) return false;
 
@@ -1989,11 +1993,20 @@ function upgradeUnit(unit) {
     return true;
 }
 
+/**
+ * Gold cost for the upgrade that moves from `currentTier` to `currentTier + 1`.
+ * Derived from the unit definition's base shop price (`def.cost`) only.
+ */
+function computeUpgradeGoldCost(def, currentTier) {
+    const f = currentTier === 0 ? UPGRADE_COST_FRACTION_TIER1 : UPGRADE_COST_FRACTION_TIER2;
+    return Math.round(def.cost * f);
+}
+
 function getUpgradeCost(unit) {
     if (!unit) return 0;
     const def = UNIT_DEFS[unit.defId];
     if (unit.tier >= def.upgrades.length) return Infinity;
-    return Math.round(def.cost * Math.pow(UPGRADE_COST_MULTIPLIER, unit.tier + 1));
+    return computeUpgradeGoldCost(def, unit.tier);
 }
 
 function getUpgradeName(unit) {
@@ -4739,14 +4752,21 @@ const RegressionTests = {
             PATH_SOUTH_UNLOCK_WAVE === 15);
 
         // --- Upgrade system tests ---
-        this.assert('Upgrade cost multiplier is 1.4',
-            UPGRADE_COST_MULTIPLIER === 1.4);
+        this.assert('Upgrade tier-1 fraction',
+            UPGRADE_COST_FRACTION_TIER1 === 0.32);
+        this.assert('Upgrade tier-2 fraction',
+            UPGRADE_COST_FRACTION_TIER2 === 0.38);
 
-        // Test upgrade cost calculation
-        const batteryUpgCost = Math.round(UNIT_DEFS[0].cost * Math.pow(UPGRADE_COST_MULTIPLIER, 1));
-        this.assert('Battery Tier 1 upgrade cost',
-            batteryUpgCost === 280,
-            `Got ${batteryUpgCost}`);
+        const testBatt = createPlayerUnit(UNIT_DEFS[0], 100, 100);
+        const t1Price = Math.round(UNIT_DEFS[0].cost * UPGRADE_COST_FRACTION_TIER1);
+        this.assert('Battery Tier 1 upgrade cost is fraction of base price',
+            getUpgradeCost(testBatt) === t1Price,
+            `expected ${t1Price}`);
+        testBatt.tier = 1;
+        const t2Price = Math.round(UNIT_DEFS[0].cost * UPGRADE_COST_FRACTION_TIER2);
+        this.assert('Battery Tier 2 upgrade cost uses tier-2 fraction',
+            getUpgradeCost(testBatt) === t2Price,
+            `expected ${t2Price}`);
 
         // Test upgrade application
         const testUnit = createPlayerUnit(UNIT_DEFS[0], 100, 100);

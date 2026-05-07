@@ -4,7 +4,7 @@
  *
  * PRIORITY ORDER for unit adjustments:
  *   1. HP, DPS, cooldown (primary levers — direct combat effectiveness)
- *   2. Cost, upgrade cost multiplier (secondary — economy effects)
+ *   2. Cost, upgrade price fractions (secondary — economy effects)
  *   3. Range (tertiary — affects map-scale relationships, change sparingly)
  *
  * All adjustments are subject to REALISM CONSTRAINTS that preserve
@@ -258,9 +258,13 @@ class Rebalancer {
                     for (let i = 0; i < 6; i++) {
                         setV(adj, i, 'hp', getV(adj, i, 'hp') * 1.05);
                     }
-                    // Reduce upgrade cost multiplier to make upgrades more accessible
-                    adj['UPGRADE_COST_MULTIPLIER'] = Math.max(1.0,
-                        (adj['UPGRADE_COST_MULTIPLIER'] || 1.4) - 0.05);
+                    // Lower per-tier fractions so upgrades stay affordable
+                    const f1 = typeof adj['UPGRADE_COST_FRACTION_TIER1'] === 'number'
+                        ? adj['UPGRADE_COST_FRACTION_TIER1'] : 0.32;
+                    const f2 = typeof adj['UPGRADE_COST_FRACTION_TIER2'] === 'number'
+                        ? adj['UPGRADE_COST_FRACTION_TIER2'] : 0.38;
+                    adj['UPGRADE_COST_FRACTION_TIER1'] = Math.max(0.12, f1 - 0.03);
+                    adj['UPGRADE_COST_FRACTION_TIER2'] = Math.max(0.15, f2 - 0.03);
                     break;
 
                 case 'LOW_DIVERSITY': {

@@ -176,7 +176,7 @@ All units drawn on canvas with phosphor glow + unique distinctive shapes. Range 
 
 ### 5.8 Upgrade System
 - Each placed unit can be upgraded through tiers by clicking/selecting it and spending funds
-- **Upgrade cost multiplier:** Each tier costs 1.4x the previous tier's cost
+- **Upgrade gold cost:** Each tier costs a **fraction of that unit type’s base build price** (`UNIT_DEFS[n].cost`) — tier 0→1 and tier 1→2 use separate tunable fractions (not a compounding exponential on prior tier price)
 - All upgrade stats (range boost %, damage boost, new abilities) are tunable constants at top of code
 - Upgrades are per-unit-instance (not global)
 
@@ -328,7 +328,7 @@ STALEMATE_WAVE, UNLIMITED_TANKER_INCREMENT, UNLIMITED_ESCORT_INCREMENT, ...
 
 // === PLAYER UNITS (per unit type) ===
 UNIT_COST, UNIT_HP, UNIT_DPS, UNIT_RANGE, UNIT_COOLDOWN, UNIT_EVASION,
-UNIT_SIGNATURE, UPGRADE_COST_MULTIPLIER, UPGRADE_TIER1_*, UPGRADE_TIER2_*
+UNIT_SIGNATURE, UPGRADE_COST_FRACTION_TIER1, UPGRADE_COST_FRACTION_TIER2, UPGRADE_TIER1_*, UPGRADE_TIER2_*
 
 // === ENEMY UNITS ===
 TANKER_SMALL_HP, TANKER_SMALL_SPEED, TANKER_MED_HP, ...
@@ -408,7 +408,7 @@ PATH_UNLOCK_WAVES (array of wave numbers when new paths activate)
 - Additional shipping paths (northern Qeshm, southern flanking)
 - Path unlock at wave thresholds
 - Enemy path assignment logic
-- **Test:** Upgrades apply correct stat changes. Costs scale with tier. New paths appear at correct waves. Enemies use multiple paths.
+- **Test:** Upgrades apply correct stat changes. Upgrade gold uses per-tier fractions of base cost. New paths appear at correct waves. Enemies use multiple paths.
 
 ### Step 8: UI Polish, Audio, & Final Integration
 - Full HUD implementation
@@ -450,3 +450,14 @@ The final HTML file must incorporate a comprehensive test suite covering every c
 - **Regression from original hormuz-map.html: ZERO tolerance**
 
 Tests run as in-browser console unit tests (assert functions, auto-run via hidden hotkey). Manual playthrough checklists for visual/interaction verification.
+
+---
+
+## 14. Architecture decisions and implementation roadmap
+
+The **product specification** above remains authoritative. Engineering and process decisions (documentation layout, CI gates, self-play tooling choices, branch policy) are recorded as **Architecture Decision Records** under `docs/adr/`. New features that affect shipped behavior or balance automation should add an ADR before implementation, with an **After Action Report** when the change is complete—see `docs/adr/README.md`.
+
+**Automated verification** beyond this file:
+
+- **Browser:** in-game suite (Ctrl+T) in `hormuz-game.html`.
+- **Node (self-play):** `npm test` (fast) and `npm run test:extended` (full headless smoke); documented gaps in `docs/COVERAGE.md`.
