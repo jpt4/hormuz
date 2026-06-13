@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>W.O.P.R. - STRAIT OF HORMUZ DEFENSE v2.0</title>
+    <title>W.O.P.R. - STRAIT OF HORMUZ DEFENSE v2.5</title>
     <style>
         /* ================================================================
            STYLING SYSTEM — Canonical from hormuz-map.html v4.9
@@ -778,7 +778,7 @@
         <!-- Intro screen -->
         <div class="overlay-screen" id="screen-intro">
             <h1 style="letter-spacing: 12px; margin-bottom: 5px; font-size: 3em;">W.O.P.R.</h1>
-            <h2 style="letter-spacing: 6px; opacity: 0.7;">STRAIT OF HORMUZ DEFENSE v2.0</h2>
+            <h2 id="intro-version-label" style="letter-spacing: 6px; opacity: 0.7;">STRAIT OF HORMUZ DEFENSE v2.5</h2>
             <p style="max-width: 700px; font-size: 1.1em; margin: 20px 0;">
                 Establish Iranian coastal and naval defenses to disrupt commercial shipping
                 through the Strait of Hormuz. Drive global crude oil prices above $250/barrel
@@ -813,7 +813,7 @@
 
 <script>
 /* ====================================================================
-   W.O.P.R. ENGINE v2.0 — STRAIT OF HORMUZ DEFENSE
+   W.O.P.R. ENGINE — STRAIT OF HORMUZ DEFENSE (see GAME_VERSION in §1)
    Map geometry canonical from hormuz-map.html v4.9
 
    TABLE OF CONTENTS (search "SECTION N" to jump):
@@ -856,6 +856,10 @@
    - requestAnimationFrame loop with delta-time capping
    - Phase state machine: intro→setup→defend→waveEnd→(repeat | end)
    ==================================================================== */
+
+// --- RELEASE VERSION (bump minor when a shipped ADR changes playable behavior) ---
+// v2.N tracks the latest gameplay ADR (000N). Playtesters match intro screen + tab title to GitHub Pages deploy.
+const GAME_VERSION = '2.5';  // ADR 0005: performance-adaptive wave difficulty
 
 /* ====================================================================
    SECTION 1: TUNABLE CONSTANTS
@@ -5257,7 +5261,17 @@ function buildGlowSprites() {
     }
 }
 
+function applyGameVersionLabels() {
+    const label = `v${GAME_VERSION}`;
+    if (!HEADLESS && typeof document !== 'undefined') {
+        document.title = `W.O.P.R. - STRAIT OF HORMUZ DEFENSE ${label}`;
+        const introLabel = document.getElementById('intro-version-label');
+        if (introLabel) introLabel.textContent = `STRAIT OF HORMUZ DEFENSE ${label}`;
+    }
+}
+
 function init() {
+    applyGameVersionLabels();
     // Build performance caches (one-time cost at startup)
     buildLandGrid();
     buildTerrainOverlayGrid();
@@ -5777,6 +5791,10 @@ const RegressionTests = {
             typeof SFX.defeat === 'function' &&
             typeof SFX.stalemate === 'function');
 
+        // --- Release version (playtester deploy check) ---
+        this.assert('GAME_VERSION matches latest shipped gameplay ADR',
+            GAME_VERSION === '2.5');
+
         // --- ADR 0005: performance-adaptive wave difficulty ---
         this.assert('Adaptive difficulty constants defined',
             ADAPT_SPAN > 0 && ADAPT_FLOOR < 1 && ADAPT_CEIL > 1);
@@ -5900,6 +5918,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         // State
         GameState, Entities, UNIT_DEFS,
+        get GAME_VERSION() { return GAME_VERSION; },
         // Core loop
         update, startGame, checkWinLose,
         // Unit management

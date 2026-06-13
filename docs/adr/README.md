@@ -16,7 +16,8 @@ Per **AGENTS.md**, substantive features are preceded by an ADR. Records use the 
 
 1. Copy `template.md` to `NNNN-short-title.md` with the next sequence number.
 2. Fill Context, Decision, Consequences, Success / Failure criteria.
-3. Implement the change behind that decision.
-4. Add an **After Action Report** file: `NNNN-short-title-AAR.md` summarizing outcomes and what to revisit.
+3. **Bump `GAME_VERSION`** in `hormuz-game.html` (minor digit = ADR sequence for gameplay changes, e.g. ADR 0005 → `2.5`).
+4. Implement the change behind that decision.
+5. Add an **After Action Report** file: `NNNN-short-title-AAR.md` summarizing outcomes and what to revisit.
 
 The project design in `DESIGN.md` is the product specification; ADRs capture **process and engineering choices** that implement or constrain that design.
