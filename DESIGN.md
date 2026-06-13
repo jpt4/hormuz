@@ -127,18 +127,16 @@ All units drawn on canvas with phosphor glow + unique distinctive shapes. Range 
   - Tier 1: 7 attacks before depletion, +damage
   - Tier 2: 10 attacks, faster drone speed, increased splash radius
 
-### 5.4 Mine Layer System
-- **Placement:** Two-step mechanic
-  1. Player places mine layer unit on Iranian coast strip or island
-  2. Mine layer autonomously places mines at **random positions along the tanker corridor** within its placement radius
-- **Max active mines:** 4 at a time per mine layer
-- **Icon:** Circle with concentric ring marks (mine layer); pulsing dot (mine)
-- **Signature:** MEDIUM (the mine layer itself; mines are invisible to cruise missiles)
-- **Base stats:** Cost 100M, HP 280, Mine damage 300 (splash), Mine placement radius 550px
-- **Mine behavior:** Detonates on any ship passing within proximity. Splash damage hits nearby ships too. Mines do NOT damage aircraft.
-- **Upgrades:**
-  - Tier 1: Mine damage +60%, faster mine respawn
-  - Tier 2: 6 max active mines, larger splash radius
+### 5.4 Heidar-5 Coastal Minelaying Station (ADR 0004)
+
+- **Designation:** Heidar-5 Coastal Minelaying Station — coastal control point dispatching USV sorties (see ADR 0004 for naming rationale).
+- **Placement:** Iranian coast strip or island (`coast` placement type); terrain overlay shows valid coast cells when selected.
+- **Mine placement:** USVs seed mines at **random points on active shipping lane splines** (TR-7 / TSS paths from `pathCache`) within the station’s placement radius — not random open water.
+- **Max active mines:** 4 at a time per station (6 after Dense Field upgrade).
+- **Signature:** MEDIUM (station itself; mines are not cruise-missile targets).
+- **Base stats:** See `UNIT_DEFS[3]` in `hormuz-game.html` (authoritative).
+- **Mine behavior:** Proximity detonation on convoy units; splash damage. Mines do not damage aircraft.
+- **Upgrades:** Heavy Mines (+damage, faster respawn); Dense Field (+range, 6 max mines).
 
 ### 5.5 Zolfaghar Fast Attack Boat (FAB)
 - **Placement:** Water only (Strait waters)
@@ -277,6 +275,17 @@ Path following uses SVG `getPointAtLength` (or pre-sampled points for canvas per
 - Contains: objective, controls, unit summaries, economy rules, win/lose/stalemate conditions
 - Dismiss with click, Escape, or `R`/`?`
 - Toggleable anytime during gameplay
+
+### 8.5 Placement terrain overlays (ADR 0004)
+
+While a unit type is selected for placement, the map shows **mutually exclusive** zone highlights:
+
+- **Inland sanctuary** — mainland interior; land units; destroyer-immune
+- **Littoral exposure** — coast/islands; land units; destroyer-vulnerable
+- **Coast strip** — Heidar-5 placement only
+- **Naval deployment** — open water for FAB/submarine
+
+A **range preview circle** follows the cursor. **Escort destroyer gun range** displays on hover or click of a DDG. Documented in the in-game reference panel §TERRAIN & PLACEMENT.
 
 ---
 

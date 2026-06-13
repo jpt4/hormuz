@@ -9,6 +9,7 @@ Per **AGENTS.md**, substantive features are preceded by an ADR. Records use the 
 | [0001](./0001-repository-governance-and-quality-gates.md) | Repository governance, documentation layers, and test gates | Accepted |
 | [0002](./0002-upgrade-pricing-as-fraction-of-base.md) | Upgrade gold cost as fractions of base unit price | Accepted |
 | [0003](./0003-balance-verisimilitude-layered-threat.md) | Balance, verisimilitude, layered threat geography | Accepted |
+| [0004](./0004-placement-ux-minelaying-and-terrain-overlays.md) | Placement UX, lane-locked minelaying, terrain overlays | Accepted |
 
 ## How to add an ADR
 

@@ -690,8 +690,8 @@
                 <tbody>
                     <tr><td>HY-2 Silkworm ASCM Battery</td><td>$250M</td><td>400</td><td>55</td><td>700</td><td>HEAVY</td></tr>
                     <tr><td>Misagh-2 SAM Site</td><td>$150M</td><td>200</td><td>15</td><td>600</td><td>MED</td></tr>
-                    <tr><td>Shahed One-Way Strike Drone</td><td>$45M</td><td>60</td><td>100</td><td>850</td><td>LOW</td></tr>
-                    <tr><td>Shahid Baziari Mine Layer</td><td>$90M</td><td>250</td><td>250*</td><td>550</td><td>MED</td></tr>
+                    <tr><td>Shahed One-Way Strike Drone</td><td>$45M</td><td>60</td><td>85</td><td>850</td><td>LOW</td></tr>
+                    <tr><td>Heidar-5 Coastal Minelaying Station</td><td>$90M</td><td>250</td><td>250*</td><td>550</td><td>MED</td></tr>
                     <tr><td>Zolfaghar Fast Attack Boat</td><td>$55M</td><td>80</td><td>15</td><td>300</td><td>LOW</td></tr>
                     <tr><td>Ghadir-class Submarine</td><td>$300M</td><td>180</td><td>70</td><td>450</td><td>STEALTH</td></tr>
                 </tbody>
@@ -702,8 +702,8 @@
             <ul>
                 <li><strong>HY-2 Silkworm ASCM Battery</strong> &mdash; Powerful anti-ship cruise missile battery. Place on Iranian territory. High damage and range, but HEAVY signature draws cruise missile fire. Pair with SAMs for protection.</li>
                 <li><strong>Misagh-2 SAM Site</strong> &mdash; Anti-air defense. Intercepts incoming cruise missiles (35% chance per shot) and engages F-35s. Also fires on surface targets. Essential for protecting high-value assets from missile strikes.</li>
-                <li><strong>Shahed One-Way Strike Drone</strong> &mdash; Expendable loitering munition swarm. Launches waves of kamikaze drones at surface targets with splash damage. <em>Depletes after a fixed number of strikes</em> (base: 4), then is destroyed. Cheap, long range, but one-time use. LOW signature makes it hard to target.</li>
-                <li><strong>Shahid Baziari Mine Layer</strong> &mdash; Coastal mine warfare system. Place near the coast; an unmanned surface vessel (USV) autonomously travels out to place mines along shipping lanes within its radius. <em>Maximum active mines limited</em> (base: 4). Mines detonate on proximity to passing ships, dealing heavy splash damage. Detonated mines respawn after a delay.</li>
+                <li><strong>Shahed One-Way Strike Drone</strong> &mdash; Expendable loitering munition swarm. Launches kamikaze attacks at surface targets with splash damage. <em>Depletes after a fixed number of strikes</em> (base: 3), then is destroyed. Cheap, long range, one-time use. LOW signature; escort destroyer CIWS may abort individual launch attempts (visuo-auditory feedback only).</li>
+                <li><strong>Heidar-5 Coastal Minelaying Station</strong> &mdash; IRGC coastal mine-warfare post. Place on the <em>coast strip</em>; a USV sorties out to seed mines at <strong>random points along active shipping lanes</strong> within placement range (TR-7 / TSS routes). Max 4 active mines (base). Mines detonate on proximity with splash damage.</li>
                 <li><strong>Zolfaghar Fast Attack Boat (FAB)</strong> &mdash; Small, fast patrol craft. Place in water; <em>automatically patrols in a circle</em> around its deployment point. Cheap and evasive (LOW signature, 90% cruise missile evasion), but low damage. Useful for harassing tankers in the strait.</li>
                 <li><strong>Ghadir-class Submarine</strong> &mdash; Stealth torpedo platform. Place in water; <em>patrols in a circle</em> (slower than FABs). STEALTH signature makes it immune to cruise missiles and invisible to F-35s. Prioritizes escort destroyers. Expensive but survivable.</li>
             </ul>
@@ -715,8 +715,8 @@
                 <tbody>
                     <tr><td>Silkworm</td><td><strong>Extended Range</strong> (+30% range) $350M</td><td><strong>Dual Targeting</strong> (+25% dps, +20% hp, faster reload) $490M</td></tr>
                     <tr><td>SAM</td><td><strong>Anti-Ship Module</strong> (+15% range, +20% dps, adds tanker targeting) $210M</td><td><strong>Dual Target + Splash</strong> (+30% dps, +15% hp, 60px splash) $294M</td></tr>
-                    <tr><td>Drone</td><td><strong>Extended Swarm</strong> (6 strikes instead of 4, +15% dps) $63M</td><td><strong>Heavy Swarm</strong> (8 strikes, +10% range, +25% dps) $88M</td></tr>
-                    <tr><td>Mine Layer</td><td><strong>Heavy Mines</strong> (+60% mine damage, faster respawn) $126M</td><td><strong>Dense Field</strong> (+15% placement range, 6 active mines) $176M</td></tr>
+                    <tr><td>Drone</td><td><strong>Extended Swarm</strong> (6 strikes instead of 3, +15% dps) $63M</td><td><strong>Heavy Swarm</strong> (8 strikes, +10% range, +25% dps) $88M</td></tr>
+                    <tr><td>Heidar-5</td><td><strong>Heavy Mines</strong> (+60% mine damage, faster respawn) $126M</td><td><strong>Dense Field</strong> (+15% placement range, 6 active mines) $176M</td></tr>
                     <tr><td>FAB</td><td><strong>Fast Attack</strong> (+15% range, +30% dps, +50% patrol speed) $77M</td><td><strong>Torpedo Kit</strong> (+50% dps, +20% hp, burst fire) $108M</td></tr>
                     <tr><td>Submarine</td><td><strong>Advanced Torpedoes</strong> (+20% range, +25% dps) $420M</td><td><strong>Dual Salvo</strong> (+40% dps, +15% hp, faster reload) $588M</td></tr>
                 </tbody>
@@ -725,7 +725,7 @@
             <h3>COALITION THREAT ASSESSMENT</h3>
             <ul>
                 <li><strong>TANKERS</strong> (Small / Medium / VLCC) &mdash; Commercial vessels transiting the strait. Destroying them raises global oil prices; letting them escape reduces pressure. Larger tankers are tougher but worth more. <em>Oil price changes have diminishing returns as prices rise.</em></li>
-                <li><strong>ESCORT DESTROYERS</strong> &mdash; Arleigh Burke-class guided missile destroyers. Heavily armed and armored; fire on Iranian defensive positions within range. Cannot strike deep inland. Destroying one awards $100M and contributes toward F-14 charges.</li>
+                <li><strong>ESCORT DESTROYERS</strong> &mdash; Arleigh Burke-class guided missile destroyers. Heavily armed; fire on Iranian positions within gun range. <em>Cannot strike mainland interior</em> (ADR 0003). Click or hover a DDG to preview its threat circle. Destroying one awards $100M and contributes toward F-14 charges.</li>
                 <li><strong>F-35 LIGHTNING II</strong> (from Wave 4) &mdash; Stealth strike aircraft. Fly across the map on attack runs, targeting all units except submarines. Dangerous to exposed positions. $150M bounty on kill.</li>
                 <li><strong>TOMAHAWK CRUISE MISSILES</strong> &mdash; Long-range precision strikes. Target units weighted by radar signature (HEAVY targeted most, STEALTH immune). Only SAM sites can intercept (35% per engagement). The primary threat to static defenses.</li>
             </ul>
@@ -742,7 +742,19 @@
                 <li><strong>Waves 1&ndash;7:</strong> TR-7 (primary) only</li>
                 <li><strong>Waves 8&ndash;14:</strong> + Northern Qeshm route unlocks</li>
                 <li><strong>Waves 15+:</strong> + Southern flanking route unlocks</li>
+                <li>Convoy packets share a lane; Heidar-5 mines are placed <em>on</em> active lane geometry within range.</li>
             </ul>
+
+            <h3>TERRAIN &amp; PLACEMENT (select a unit to see overlays)</h3>
+            <ul>
+                <li><strong style="color:#00ff88;">Inland sanctuary</strong> &mdash; Mainland interior. Land units (Silkworm, SAM, drone). Escort destroyers cannot engage here.</li>
+                <li><strong style="color:#ffa500;">Littoral exposure</strong> &mdash; Coast and islands. Land units allowed; within escort destroyer gun range.</li>
+                <li><strong style="color:#00e6cc;">Coast strip</strong> &mdash; Valid Heidar-5 placement only (near water on Iranian territory).</li>
+                <li><strong style="color:#008cff;">Naval deployment</strong> &mdash; Open strait waters. FAB and Ghadir submarine placement.</li>
+                <li><strong>Cyan dashed circle</strong> &mdash; Selected unit&rsquo;s range preview at cursor (valid = bright, invalid = red).</li>
+                <li><strong>Orange dashed circle</strong> &mdash; Escort destroyer gun range (hover or click DDG).</li>
+            </ul>
+            <div style="opacity: 0.6; font-size: 11px;">Zones are mutually exclusive per map cell; only relevant highlights show for the unit type selected.</div>
 
             <h3>GAME MODES</h3>
             <ul>
@@ -1067,7 +1079,15 @@ const MAP_HEIGHT = 1680;                 // px — world/viewBox height (must ma
 const OFFSCREEN_SPAWN_MARGIN = 50;       // px — how far off-screen cruise missiles spawn
 
 // --- MINE PLACEMENT ---
-const MINE_LANE_SAMPLE_STEP = 100;       // px — path sampling interval for lane proximity checks
+const MINE_LANE_SAMPLE_STEP = 100;       // px — legacy lane proximity sample (superseded by lane-point picker)
+// --- ADR 0004: PLACEMENT UX & TERRAIN OVERLAYS ---
+const ENEMY_CLICK_RADIUS = 38;           // px — click/hover radius for enemy selection (destroyer range preview)
+
+// --- TERRAIN OVERLAY (ADR 0004 — mutually exclusive placement zones) ---
+const TERRAIN_ZONE_NAVAL = 0;            // open water — FAB / submarine placement
+const TERRAIN_ZONE_INLAND = 1;           // mainland interior — land units, destroyer cannot engage
+const TERRAIN_ZONE_LITTORAL = 2;         // coast / island — minelayers, destroyer-exposed land
+const TERRAIN_OVERLAY_ALPHA = 0.11;      // fill opacity for placement zone highlights
 
 // --- PERFORMANCE ---
 const LAND_GRID_CELL = 8;               // px — resolution of pre-computed land/water grid (lower = more accurate, more memory)
@@ -1161,8 +1181,8 @@ const UNIT_DEFS = [
     },
     {
         id: 3,
-        name: 'IRGC Minelaying USV Dispenser',
-        shortName: 'MINE LAYER',
+        name: 'Heidar-5 Coastal Minelaying Station',
+        shortName: 'HEIDAR-5',
         icon: 'MNL',
         cost: 90,
         hp: 250,
@@ -1324,6 +1344,9 @@ const GameState = {
     selectedUnitType: -1,  // index into UNIT_DEFS, -1 = none
     selectedPlacedUnit: null,
     hoveredUnit: null,
+    hoveredEnemy: null,       // enemy under cursor (destroyer range preview)
+    selectedEnemy: null,      // clicked enemy (destroyer range preview persists)
+    placementCursor: null,    // { x, y } world coords while placing a unit
     sidebarOpen: false,
     refOpen: false,
 
@@ -1447,17 +1470,38 @@ container.addEventListener('mousedown', (e) => {
     }
     // Check if clicking on an existing unit to select it
     const world = screenToWorld(e.clientX, e.clientY);
+
+    // Enemy destroyer click — show escort gun range (threat assessment)
+    if (GameState.selectedUnitType === -1) {
+        let clickedDestroyer = null;
+        for (const en of Entities.enemies) {
+            if (!en.alive || en.type !== 'destroyer') continue;
+            if (Math.hypot(en.x - world.x, en.y - world.y) < ENEMY_CLICK_RADIUS) {
+                clickedDestroyer = en;
+                break;
+            }
+        }
+        if (clickedDestroyer) {
+            GameState.selectedEnemy = clickedDestroyer;
+            GameState.selectedPlacedUnit = null;
+            updateUI();
+            return;
+        }
+    }
+
     const clickedUnit = Entities.playerUnits.find(u =>
         u.hp > 0 && Math.hypot(u.x - world.x, u.y - world.y) < UNIT_CLICK_RADIUS
     );
     if (clickedUnit) {
         GameState.selectedPlacedUnit = clickedUnit;
+        GameState.selectedEnemy = null;
         updateUI();
         return;
     }
     // Deselect if clicking empty space
-    if (GameState.selectedPlacedUnit) {
+    if (GameState.selectedPlacedUnit || GameState.selectedEnemy) {
         GameState.selectedPlacedUnit = null;
+        GameState.selectedEnemy = null;
         updateUI();
     }
     isPanning = true;
@@ -1472,13 +1516,29 @@ window.addEventListener('mousemove', (e) => {
         updateViewportTransform();
         return;
     }
-    // Track hovered player unit for range circle display
+    // Track cursor for placement preview and unit/enemy hover
     const world = screenToWorld(e.clientX, e.clientY);
+    if (GameState.selectedUnitType !== -1) {
+        GameState.placementCursor = world;
+    } else {
+        GameState.placementCursor = null;
+    }
+
     GameState.hoveredUnit = null;
+    GameState.hoveredEnemy = null;
     for (const u of Entities.playerUnits) {
         if (u.hp > 0 && Math.hypot(u.x - world.x, u.y - world.y) < UNIT_CLICK_RADIUS) {
             GameState.hoveredUnit = u;
             break;
+        }
+    }
+    if (!GameState.hoveredUnit && GameState.selectedUnitType === -1) {
+        for (const en of Entities.enemies) {
+            if (!en.alive || en.type !== 'destroyer') continue;
+            if (Math.hypot(en.x - world.x, en.y - world.y) < ENEMY_CLICK_RADIUS) {
+                GameState.hoveredEnemy = en;
+                break;
+            }
         }
     }
 });
@@ -1587,6 +1647,8 @@ function isValidWaterPlacement(x, y) {
 let landGrid = null;
 let landGridCols = 0;
 let landGridRows = 0;
+/** Per-cell terrain zone for placement overlays (TERRAIN_ZONE_* constants) */
+let terrainOverlayGrid = null;
 
 function buildLandGrid() {
     landGridCols = Math.ceil(MAP_WIDTH / LAND_GRID_CELL);
@@ -1609,6 +1671,28 @@ function buildLandGrid() {
                         break;
                     }
                 }
+            }
+        }
+    }
+}
+
+/** Build mutually exclusive terrain zones for placement overlays (after landGrid). */
+function buildTerrainOverlayGrid() {
+    terrainOverlayGrid = new Uint8Array(landGrid.length);
+    for (let row = 0; row < landGridRows; row++) {
+        for (let col = 0; col < landGridCols; col++) {
+            const x = col * LAND_GRID_CELL + LAND_GRID_CELL / 2;
+            const y = row * LAND_GRID_CELL + LAND_GRID_CELL / 2;
+            const idx = row * landGridCols + col;
+            if (isPointInWaterFast(x, y)) {
+                terrainOverlayGrid[idx] = TERRAIN_ZONE_NAVAL;
+            } else if (isValidLandPlacementFast(x, y)) {
+                const zone = classifyThreatZone(x, y, 'land');
+                terrainOverlayGrid[idx] = zone === 'mainland_interior'
+                    ? TERRAIN_ZONE_INLAND
+                    : TERRAIN_ZONE_LITTORAL;
+            } else {
+                terrainOverlayGrid[idx] = TERRAIN_ZONE_NAVAL; // invalid / foreign — never highlighted
             }
         }
     }
@@ -2124,6 +2208,8 @@ function selectUnitType(idx) {
     if (idx < 0 || idx >= UNIT_DEFS.length) return;
     if (GameState.funds < UNIT_DEFS[idx].cost) return;
     GameState.selectedUnitType = idx;
+    GameState.selectedPlacedUnit = null;
+    GameState.selectedEnemy = null;
     updateUI();
 }
 
@@ -3868,51 +3954,59 @@ function updateMineLayers(dt) {
     }
 }
 
-function placeMine(mineLayer) {
-    // Find a valid water position within placement radius, along the tanker corridor
-    for (let i = 0; i < MINE_PLACEMENT_ATTEMPTS; i++) {
-        const angle = gameRandom() * Math.PI * 2;
-        const dist = MINE_PLACEMENT_MIN_DIST + gameRandom() * (mineLayer.range - MINE_PLACEMENT_MIN_DIST);
-        const mx = mineLayer.x + Math.cos(angle) * dist;
-        const my = mineLayer.y + Math.sin(angle) * dist;
+/**
+ * Pick a random point ON an active shipping lane within the mine layer's placement radius.
+ * Mines are laid directly on TSS/TR transit splines so convoys encounter them.
+ * Returns { x, y } or null if no lane segment intersects the radius.
+ */
+function pickLaneMinePoint(mineLayer, pathIds) {
+    const r2 = mineLayer.range * mineLayer.range;
+    const minD2 = MINE_PLACEMENT_MIN_DIST * MINE_PLACEMENT_MIN_DIST;
+    const cx = mineLayer.x;
+    const cy = mineLayer.y;
+    const candidates = [];
 
-        // Must be in water (fast grid lookup)
-        if (!isPointInWaterFast(mx, my)) continue;
-
-        // Must be reasonably close to a shipping lane (using cached path positions)
-        let nearLane = false;
-        const laneR2 = MINE_LANE_PROXIMITY * MINE_LANE_PROXIMITY;
-        for (const pathId of GameState.activePaths) {
-            const c = pathCache[pathId];
-            if (!c) continue;
-            // Sample every ~MINE_LANE_SAMPLE_STEP px along cached path
-            const step = Math.max(1, Math.round(MINE_LANE_SAMPLE_STEP / PATH_CACHE_STEP));
-            for (let j = 0; j < c.numPoints; j += step) {
-                const pdx = c.data[j * 2] - mx, pdy = c.data[j * 2 + 1] - my;
-                if (pdx * pdx + pdy * pdy < laneR2) {
-                    nearLane = true;
-                    break;
-                }
+    for (const pathId of pathIds) {
+        const c = pathCache[pathId];
+        if (!c) continue;
+        for (let j = 0; j < c.numPoints; j++) {
+            const px = c.data[j * 2];
+            const py = c.data[j * 2 + 1];
+            const dx = px - cx;
+            const dy = py - cy;
+            const d2 = dx * dx + dy * dy;
+            if (d2 <= r2 && d2 >= minD2) {
+                candidates.push(px, py);
             }
-            if (nearLane) break;
         }
-        if (!nearLane) continue;
-
-        // Launch a USV to deliver the mine (instead of placing directly)
-        Entities.usvs.push({
-            x: mineLayer.x,
-            y: mineLayer.y,
-            targetX: mx,
-            targetY: my,
-            ownerUnit: mineLayer,
-            damage: mineLayer.dps,
-            splashRadius: UNIT_DEFS[3].mineSplashRadius,
-            speed: USV_SPEED,
-            phase: 'outbound',  // outbound → laying → returning
-            alive: true,
-        });
-        return;
     }
+
+    if (candidates.length === 0) return null;
+
+    for (let attempt = 0; attempt < MINE_PLACEMENT_ATTEMPTS; attempt++) {
+        const pick = Math.floor(gameRandom() * (candidates.length / 2)) * 2;
+        return { x: candidates[pick], y: candidates[pick + 1] };
+    }
+    const pick = Math.floor(gameRandom() * (candidates.length / 2)) * 2;
+    return { x: candidates[pick], y: candidates[pick + 1] };
+}
+
+function placeMine(mineLayer) {
+    const target = pickLaneMinePoint(mineLayer, GameState.activePaths);
+    if (!target) return;
+
+    Entities.usvs.push({
+        x: mineLayer.x,
+        y: mineLayer.y,
+        targetX: target.x,
+        targetY: target.y,
+        ownerUnit: mineLayer,
+        damage: mineLayer.dps,
+        splashRadius: UNIT_DEFS[3].mineSplashRadius,
+        speed: USV_SPEED,
+        phase: 'outbound',
+        alive: true,
+    });
 }
 
 function updateUSVs(dt) {
@@ -4224,16 +4318,86 @@ function inView(x, y, margin) {
            y >= _viewT - margin && y <= _viewB + margin;
 }
 
+function drawTerrainOverlay() {
+    if (HEADLESS || GameState.selectedUnitType === -1 || !terrainOverlayGrid) return;
+    const def = UNIT_DEFS[GameState.selectedUnitType];
+    const cell = LAND_GRID_CELL;
+    const margin = cell;
+
+    for (let row = 0; row < landGridRows; row++) {
+        const y = row * cell;
+        if (y + cell < _viewT - margin || y > _viewB + margin) continue;
+        for (let col = 0; col < landGridCols; col++) {
+            const x = col * cell;
+            if (x + cell < _viewL - margin || x > _viewR + margin) continue;
+            const idx = row * landGridCols + col;
+            const cx = x + cell / 2;
+            const cy = y + cell / 2;
+            let color = null;
+
+            if (def.placement === 'water') {
+                if (terrainOverlayGrid[idx] === TERRAIN_ZONE_NAVAL && isValidWaterPlacementFast(cx, cy)) {
+                    color = `rgba(0, 140, 255, ${TERRAIN_OVERLAY_ALPHA})`;
+                }
+            } else if (def.placement === 'coast') {
+                if (isValidCoastPlacementFast(cx, cy)) {
+                    color = `rgba(0, 230, 200, ${TERRAIN_OVERLAY_ALPHA + 0.03})`;
+                }
+            } else if (def.placement === 'land') {
+                if (terrainOverlayGrid[idx] === TERRAIN_ZONE_INLAND) {
+                    color = `rgba(0, 255, 120, ${TERRAIN_OVERLAY_ALPHA})`;
+                } else if (terrainOverlayGrid[idx] === TERRAIN_ZONE_LITTORAL) {
+                    color = `rgba(255, 165, 0, ${TERRAIN_OVERLAY_ALPHA})`;
+                }
+            }
+            if (color) {
+                ctx.fillStyle = color;
+                ctx.fillRect(x, y, cell, cell);
+            }
+        }
+    }
+}
+
+/** Escort destroyer gun range — click or hover a DDG on the map */
+function drawEnemyThreatRanges() {
+    const e = GameState.selectedEnemy || GameState.hoveredEnemy;
+    if (!e || !e.alive || e.type !== 'destroyer') return;
+    if (!inView(e.x, e.y, DESTROYER_RANGE + 30)) return;
+    ctx.strokeStyle = 'rgba(255, 170, 0, 0.55)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 6]);
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, DESTROYER_RANGE, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+}
+
+/** Placement range preview at cursor while a unit type is selected */
+function drawPlacementPreview() {
+    if (GameState.selectedUnitType === -1 || !GameState.placementCursor) return;
+    const def = UNIT_DEFS[GameState.selectedUnitType];
+    const { x, y } = GameState.placementCursor;
+    if (!inView(x, y, def.range + 40)) return;
+    const valid = validatePlacement(def, x, y).valid;
+    ctx.strokeStyle = valid ? 'rgba(0, 255, 255, 0.55)' : 'rgba(255, 70, 70, 0.45)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.arc(x, y, def.range, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.arc(x, y, 6, 0, Math.PI * 2);
+    ctx.fillStyle = valid ? 'rgba(0, 255, 255, 0.7)' : 'rgba(255, 70, 70, 0.7)';
+    ctx.fill();
+}
+
 function draw() {
     ctx.clearRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
     updateViewRect();
     _currentFont = '';  // Reset font tracking each frame
 
-    // --- Range circles for selected unit type (placement preview) ---
-    if (GameState.selectedUnitType !== -1) {
-        // Show range at cursor position (approximate center if no cursor tracking)
-        // Actual cursor tracking happens in mousemove; for now show on placed units
-    }
+    drawTerrainOverlay();
 
     // --- Mines ---
     drawMines();
@@ -4273,6 +4437,9 @@ function draw() {
         }
         ctx.setLineDash([]);
     }
+
+    drawEnemyThreatRanges();
+    drawPlacementPreview();
 
     // --- Player units ---
     for (let i = 0; i < Entities.playerUnits.length; i++) {
@@ -4785,6 +4952,9 @@ function startGame() {
     GameState.f14OilMilestonesAwarded = [];
     GameState.routeAlert = '';
     GameState.routeAlertTimer = 0;
+    GameState.selectedEnemy = null;
+    GameState.hoveredEnemy = null;
+    GameState.placementCursor = null;
     GameState.phase = 'setup';
     GameState.setupTimer = SETUP_PHASE_DURATION;
     GameState.oil = STARTING_OIL_PRICE;
@@ -4869,6 +5039,7 @@ function buildGlowSprites() {
 function init() {
     // Build performance caches (one-time cost at startup)
     buildLandGrid();
+    buildTerrainOverlayGrid();
     buildPathCaches();
     buildGlowSprites();
 
@@ -5128,6 +5299,35 @@ const RegressionTests = {
             GameState.salvoRemaining >= CRUISE_SALVO_MIN &&
             GameState.salvoRemaining <= CRUISE_SALVO_MAX * 4);
         GameState.salvoRemaining = salvoSaved;
+
+        // --- ADR 0004: lane mines & terrain zones ---
+        this.assert('Heidar-5 mine layer designation',
+            UNIT_DEFS[3].shortName === 'HEIDAR-5');
+        this.assert('Terrain overlay grid built',
+            terrainOverlayGrid !== null && terrainOverlayGrid.length === landGrid.length);
+        this.assert('Terrain zones are mutually exclusive constants',
+            TERRAIN_ZONE_NAVAL !== TERRAIN_ZONE_INLAND &&
+            TERRAIN_ZONE_INLAND !== TERRAIN_ZONE_LITTORAL);
+
+        const layer = { x: 800, y: 700, range: 550 };
+        const lanePt = pickLaneMinePoint(layer, ['lane-tr7']);
+        this.assert('Mine point picked on active lane',
+            lanePt !== null && typeof lanePt.x === 'number');
+        if (lanePt) {
+            let nearLane = false;
+            const c = pathCache['lane-tr7'];
+            const tol2 = 4 * 4;
+            for (let j = 0; j < c.numPoints; j++) {
+                const dx = c.data[j * 2] - lanePt.x;
+                const dy = c.data[j * 2 + 1] - lanePt.y;
+                if (dx * dx + dy * dy <= tol2) { nearLane = true; break; }
+            }
+            this.assert('Mine point lies on lane-tr7 spline', nearLane);
+        }
+
+        this.assert('Destroyer threat preview constants',
+            typeof drawEnemyThreatRanges === 'function' &&
+            ENEMY_CLICK_RADIUS > 0 && DESTROYER_RANGE > 0);
 
         // --- Phase transition tests ---
         this.assert('Stalemate wave = 20',
@@ -5429,11 +5629,11 @@ if (typeof module !== 'undefined' && module.exports) {
         update, startGame, checkWinLose,
         // Unit management
         createPlayerUnit, validatePlacement, upgradeUnit, activateF14,
-        selectUnitType, buildWaveSpawnQueue, clearDeploymentCells,
+        selectUnitType, buildWaveSpawnQueue, clearDeploymentCells, pickLaneMinePoint,
         // Economy
         applyOilDelta, calculateWaveIncome,
         // Geometry
-        pathCache, landGrid, loadGeometryData,
+        pathCache, landGrid, terrainOverlayGrid, loadGeometryData, buildTerrainOverlayGrid,
         getPathPosition, isPointInWaterFast,
         isValidLandPlacementFast, isValidCoastPlacementFast, isValidWaterPlacementFast,
         // Constants (selected key ones for override)

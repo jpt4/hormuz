@@ -239,6 +239,9 @@ function createSimulation(options = {}) {
             game.GameState.f14OilMilestonesAwarded = [];
             game.GameState.routeAlert = '';
             game.GameState.routeAlertTimer = 0;
+            game.GameState.selectedEnemy = null;
+            game.GameState.hoveredEnemy = null;
+            game.GameState.placementCursor = null;
             game.clearDeploymentCells();
             game.GameState.activePaths = ['lane-tr7'];
             game.GameState.totalTime = 0;
