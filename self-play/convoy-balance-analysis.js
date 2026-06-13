@@ -1,359 +1,135 @@
 #!/usr/bin/env node
 /**
- * Coarse convoy / economy balance sheet (NOT full self-play).
+ * Full convoy balance analysis (master @ standard difficulty).
  *
- * Pulls live constants from hormuz-game.html via headless-engine, then runs
- * closed-form estimates that are cheap to re-run while tuning knobs below or
- * passing CLI overrides:
+ * Combines:
+ *   - Deterministic balance sheet (self-play/convoy-balance-sheet.js)
+ *   - Monte Carlo headless self-play (random auto-player genomes)
  *
  *   node self-play/convoy-balance-analysis.js
- *   node self-play/convoy-balance-analysis.js WAVE_HP_SCALING=0.10 STARTING_FUNDS=600
- *
- * Override names match in-game constant identifiers.
+ *   node self-play/convoy-balance-analysis.js --sheet-only
+ *   node self-play/convoy-balance-analysis.js --mc-only --mc=40
+ *   node self-play/convoy-balance-analysis.js WAVE_HP_SCALING=0.10
  */
 
 'use strict';
 
-const vm = require('vm');
 const { createSimulation } = require('./headless-engine');
+const AutoPlayer = require('./auto-player');
+const { randomGenome } = require('./strategy-genome');
+const { SeededRNG } = require('./prng');
+const {
+    runBalanceSheet,
+    printBalanceSheet,
+    CONST,
+    TUNING,
+} = require('./convoy-balance-sheet');
 
-// =============================================================================
-// COARSE TUNING KNOBS — edit here for quick what-if iteration
-// =============================================================================
-const TUNING = {
-    /** Hard cap on fielded units (deployment grid / practical ceiling). */
-    MAX_FLEET_SIZE: 36,
-    /** Fraction of theoretical fleet DPS that becomes convoy damage (range, retargeting). */
-    FLEET_EFFICIENCY: 0.55,
-    /** Cruise missiles: expected player units removed per salvo missile (splash + focus fire). */
-    CM_KILLS_PER_SALVO: 0.35,
-    /** Cruise missiles: expected units removed per drip missile during setup+defend. */
-    CM_KILLS_PER_DRIP: 0.08,
-    /** Destroyer/F-35 pressure: share of fleet HP lost to naval/air fire per wave. */
-    DDG_HP_LOSS_FRAC: 0.12,
-    F35_HP_LOSS_FRAC: 0.06,
-    /** Minimum fraction of fleet surviving attrition each wave (floor for coarse model). */
-    SURVIVAL_FLOOR: 0.45,
-    /** Greedy shop mix: prefer cheapest DPS/$ unit (true) or balanced template (false). */
-    GREEDY_CHEAP_DPS: true,
-    /** Fixed kill-rate scenarios for oil sweeps (independent of fleet model). */
-    OIL_SCENARIOS: [
-        { name: '100% kills', kill: 1.0, escape: 0.0 },
-        { name: '80% / 20%', kill: 0.8, escape: 0.2 },
-        { name: '70% / 30%', kill: 0.7, escape: 0.3 },
-        { name: '60% / 40%', kill: 0.6, escape: 0.4 },
-        { name: 'all escape', kill: 0.0, escape: 1.0 },
-    ],
-    WAVES: 20,
-};
-
-// --- Pull constants from live game module ---
-const sim0 = createSimulation({ seed: 0 });
-const G = sim0.game;
-const ctx = sim0.sandbox;
-
-function C(name) { return vm.runInContext(name, ctx); }
-
-const CONST = {
-    STARTING_FUNDS: C('STARTING_FUNDS'),
-    STARTING_OIL: C('STARTING_OIL_PRICE'),
-    OIL_WIN: C('OIL_WIN_THRESHOLD'),
-    OIL_LOSE: C('OIL_LOSE_THRESHOLD'),
-    OIL_REF: C('OIL_REFERENCE'),
-    TANKERS_MULT: C('TANKERS_PER_WAVE_MULT'),
-    ESCORTS_DIV: C('ESCORTS_PER_WAVE_DIV'),
-    F35_START: C('F35_START_WAVE'),
-    F35_DIV: C('F35_PER_WAVE_DIV'),
-    INTERDICTION_EVERY: C('INTERDICTION_EVERY_N_WAVES'),
-    INTERDICTION_TANKER_MULT: C('INTERDICTION_TANKER_MULT'),
-    INTERDICTION_SALVO: C('INTERDICTION_SALVO_MULT'),
-    HP_SCALE: C('WAVE_HP_SCALING'),
-    SPD_SCALE: C('WAVE_SPEED_SCALING'),
-    SPAWN_INT: C('SPAWN_INTERVAL_SEC'),
-    SETUP_SEC: C('SETUP_PHASE_DURATION'),
-    WAVE_INCOME_BASE: C('WAVE_INCOME_BASE'),
-    INCOME_ROUND: C('INCOME_ROUND_TO'),
-    INCOME_MULT: C('DIFFICULTY_INCOME_MULT').standard,
-    T_SMALL: C('TANKER_SMALL_HP'), T_MED: C('TANKER_MED_HP'), T_LARGE: C('TANKER_LARGE_HP'),
-    T_SMALL_S: C('TANKER_SMALL_SPEED'), T_MED_S: C('TANKER_MED_SPEED'), T_LARGE_S: C('TANKER_LARGE_SPEED'),
-    DDG_HP: C('DESTROYER_HP'), DDG_DPS: C('DESTROYER_DPS'), DDG_CD: C('DESTROYER_COOLDOWN'),
-    F35_HP: C('F35_HP'), F35_DPS: C('F35_DPS'), F35_CD: C('F35_COOLDOWN'),
-    CM_BASE: C('CRUISE_MISSILE_BASE_RATE'),
-    CM_DRIP: C('CRUISE_MISSILE_DRIP_MULT'),
-    CM_SETUP: C('CRUISE_MISSILE_SETUP_MULT'),
-    SALVO_MIN: C('CRUISE_SALVO_MIN'),
-    SALVO_MAX: C('CRUISE_SALVO_MAX'),
-    ESCORT_BONUS: C('ESCORT_KILL_BONUS'),
-    F35_BONUS: C('F35_KILL_BONUS'),
-    OIL_SD: C('OIL_SMALL_DESTROY'), OIL_SE: C('OIL_SMALL_ESCAPE'),
-    OIL_MD: C('OIL_MED_DESTROY'), OIL_ME: C('OIL_MED_ESCAPE'),
-    OIL_LD: C('OIL_LARGE_DESTROY'), OIL_LE: C('OIL_LARGE_ESCAPE'),
-};
-
-// CLI overrides: CONST_NAME=value (numbers only)
-for (const arg of process.argv.slice(2)) {
-    const m = arg.match(/^([A-Z0-9_]+)=([0-9.]+)$/);
-    if (!m) continue;
-    const key = m[1];
-    const val = Number(m[2]);
-    if (key in CONST) CONST[key] = val;
-    else if (key in TUNING) TUNING[key] = val;
-    else vm.runInContext(`${key} = ${val}`, ctx); // push into game VM for path/units if needed
-}
-
-const PATH_LEN = G.pathCache['lane-tr7'].totalLength;
-const UNIT_DEFS = G.UNIT_DEFS;
-
-// --- Helpers ---
-function applyOilDelta(oil, baseDelta) {
-    const factor = baseDelta > 0 ? CONST.OIL_REF / oil : oil / CONST.OIL_REF;
-    return Math.max(0, oil + baseDelta * factor);
-}
-
-function waveIncome(oil) {
-    const raw = CONST.WAVE_INCOME_BASE * Math.log(oil / CONST.OIL_REF + 1) * CONST.OIL_REF;
-    return Math.round((raw * CONST.INCOME_MULT) / CONST.INCOME_ROUND) * CONST.INCOME_ROUND;
-}
-
-function waveCounts(w) {
-    let tankers = w * CONST.TANKERS_MULT;
-    if (w % CONST.INTERDICTION_EVERY === 0) {
-        tankers = Math.max(1, Math.round(tankers * CONST.INTERDICTION_TANKER_MULT));
+function parseArgs(argv) {
+    const opts = { sheetOnly: false, mcOnly: false, mcRuns: 40, overrides: [] };
+    for (const arg of argv) {
+        if (arg === '--sheet-only') opts.sheetOnly = true;
+        else if (arg === '--mc-only') opts.mcOnly = true;
+        else if (arg.startsWith('--mc=')) opts.mcRuns = Math.max(1, Number(arg.slice(5)) || 40);
+        else opts.overrides.push(arg);
     }
-    const escorts = Math.floor(w / CONST.ESCORTS_DIV);
-    const f35 = w >= CONST.F35_START ? Math.floor((w - CONST.F35_START + 1) / CONST.F35_DIV) : 0;
-    return { tankers, escorts, f35, queueSize: tankers + escorts + f35 };
+    return opts;
 }
 
-function hpScale(w) { return Math.pow(1 + CONST.HP_SCALE, w - 1); }
-function spdScale(w) { return Math.pow(1 + CONST.SPD_SCALE, w - 1); }
+function runMonteCarlo(n = 40) {
+    const outcomes = { victory: 0, defeat: 0, stalemate: 0, other: 0 };
+    const finalOils = [];
+    const finalWaves = [];
 
-const EXP_TANKER_HP = 0.55 * CONST.T_SMALL + 0.30 * CONST.T_MED + 0.15 * CONST.T_LARGE;
-const EXP_TANKER_SPD = 0.55 * CONST.T_SMALL_S + 0.30 * CONST.T_MED_S + 0.15 * CONST.T_LARGE_S;
-const EXP_OIL_KILL = 0.55 * CONST.OIL_SD + 0.30 * CONST.OIL_MD + 0.15 * CONST.OIL_LD;
-const EXP_OIL_ESC = 0.55 * CONST.OIL_SE + 0.30 * CONST.OIL_ME + 0.15 * CONST.OIL_LE;
-
-function sustainedDps(def, defId) {
-    if (defId === 3) {
-        const maxMines = def.maxMines || 4;
-        return (def.dps * maxMines) / (maxMines * def.cooldown);
+    for (let s = 0; s < n; s++) {
+        const sim = createSimulation({ seed: 1000 + s });
+        const rng = new SeededRNG(2000 + s);
+        const player = new AutoPlayer(randomGenome(rng), rng);
+        const trace = sim.runGame(player);
+        const outcome = trace.outcome || 'other';
+        outcomes[outcome] = (outcomes[outcome] || 0) + 1;
+        finalOils.push(trace.finalOil);
+        finalWaves.push(trace.finalWave);
     }
-    return def.dps / def.cooldown;
+
+    return { outcomes, finalOils, finalWaves, n };
 }
 
-function convoyDamageRequired(w) {
-    const { tankers, escorts, f35 } = waveCounts(w);
-    const hs = hpScale(w);
-    const tankerHp = tankers * EXP_TANKER_HP * hs;
-    const escortHp = escorts * CONST.DDG_HP * hs;
-    const f35Hp = f35 * CONST.F35_HP * hs;
-    return { tankerHp, escortHp, f35Hp, totalHp: tankerHp + escortHp + f35Hp };
+function printMonteCarlo(mc) {
+    console.log('\n=== MONTE CARLO SELF-PLAY (random auto-player genomes) ===\n');
+    console.log(`Runs: ${mc.n} | standard difficulty`);
+    console.log('Outcomes:', mc.outcomes);
+
+    const avgOil = mc.finalOils.reduce((a, b) => a + b, 0) / mc.finalOils.length;
+    const avgWave = mc.finalWaves.reduce((a, b) => a + b, 0) / mc.finalWaves.length;
+    console.log(`Avg final oil: $${avgOil.toFixed(2)}  avg final wave: ${avgWave.toFixed(1)}`);
+    console.log(`Oil range: $${Math.min(...mc.finalOils).toFixed(2)} – $${Math.max(...mc.finalOils).toFixed(2)}`);
+
+    const victoryRate = ((mc.outcomes.victory || 0) / mc.n) * 100;
+    console.log(`Victory rate: ${victoryRate.toFixed(0)}% (random play — not optimal)`);
+    return { avgOil, avgWave, victoryRate };
 }
 
-function convoyTimeBudget(w) {
-    const { queueSize } = waveCounts(w);
-    const spawnWindow = (queueSize - 1) * CONST.SPAWN_INT;
-    const transit = PATH_LEN / (EXP_TANKER_SPD * spdScale(w));
-    return spawnWindow + transit + CONST.SETUP_SEC;
-}
+function printCombinedVerdict(sheetReport, mcSummary) {
+    console.log('\n=== COMBINED REGIME ASSESSMENT ===\n');
 
-function expectedSalvoCount(w) {
-    const mid = (CONST.SALVO_MIN + CONST.SALVO_MAX) / 2;
-    let count = Math.max(CONST.SALVO_MIN, Math.round(mid * Math.max(1, w / 4)));
-    if (w % CONST.INTERDICTION_EVERY === 0) count = Math.round(count * CONST.INTERDICTION_SALVO);
-    return count;
-}
+    const waves = sheetReport.waveRows.length;
+    const w20Need = sheetReport.waveRows[waves - 1].needDps;
+    const bestOil = sheetReport.oilScenarios.find(s => s.kill === 1)?.endOil;
+    const midOil = sheetReport.oilScenarios.find(s => s.kill === 0.7)?.endOil;
+    const worstOil = sheetReport.oilScenarios.find(s => s.kill === 0)?.endOil;
+    const campEnd = sheetReport.campaign[sheetReport.campaign.length - 1];
 
-function coarseAttrition(w, fleetCount, escorts, f35) {
-    const defendSec = convoyTimeBudget(w) - CONST.SETUP_SEC;
-    const salvo = expectedSalvoCount(w);
-    const drip = CONST.CM_BASE * w * (CONST.CM_SETUP * CONST.SETUP_SEC + CONST.CM_DRIP * defendSec);
-    const cmLoss = (salvo * TUNING.CM_KILLS_PER_SALVO) + (drip * TUNING.CM_KILLS_PER_DRIP);
-    const ballisticLoss = fleetCount * (
-        escorts * TUNING.DDG_HP_LOSS_FRAC +
-        f35 * TUNING.F35_HP_LOSS_FRAC
-    ) / Math.max(1, fleetCount);
-    const unitsLost = Math.min(fleetCount, cmLoss + ballisticLoss * 0.15);
-    const survival = Math.max(TUNING.SURVIVAL_FLOOR, 1 - unitsLost / Math.max(1, fleetCount));
-    return { survival, cmLoss: cmLoss.toFixed(1), unitsLost: unitsLost.toFixed(1) };
-}
+    console.log(`Wave ${waves} convoy demand: ~${w20Need.toFixed(0)} effective DPS for full clearance`);
+    if (bestOil != null) {
+        console.log(`Deterministic oil @${waves} (100% kills): $${bestOil.toFixed(0)} (${bestOil >= CONST.OIL_WIN ? '≥ win' : '< win'})`);
+    }
+    if (midOil != null) console.log(`Deterministic oil @${waves} (70/30):       $${midOil.toFixed(0)}`);
+    if (worstOil != null) {
+        console.log(`Deterministic oil @${waves} (all escape):   $${worstOil.toFixed(0)} (${worstOil <= CONST.OIL_LOSE ? '≤ lose' : '> lose'})`);
+    }
+    if (campEnd) {
+        console.log(`Integrated sheet model @${waves}: oil $${campEnd.oil.toFixed(0)}`);
+    }
+    if (mcSummary) {
+        console.log(`MC random play: avg oil $${mcSummary.avgOil.toFixed(2)} @ wave ${mcSummary.avgWave.toFixed(1)}, victory ${mcSummary.victoryRate.toFixed(0)}%`);
+    }
 
-const UNIT_OPTIONS = UNIT_DEFS.map((d, i) => ({
-    id: i,
-    name: d.shortName,
-    cost: d.cost,
-    dps: sustainedDps(d, i),
-    hp: d.hp,
-})).sort((a, b) => (b.dps / b.cost) - (a.dps / a.cost));
+    console.log(`\nSheet verdict: ${sheetReport.verdict}`);
 
-function buyGreedy(funds, comp, cap = TUNING.MAX_FLEET_SIZE) {
-    let rem = funds;
-    let spent = 0;
-    let count = fleetStats(comp).count;
-    while (count < cap) {
-        let bought = false;
-        for (const o of UNIT_OPTIONS) {
-            if (rem >= o.cost) {
-                comp[o.name] = (comp[o.name] || 0) + 1;
-                rem -= o.cost;
-                spent += o.cost;
-                count++;
-                bought = true;
-                break;
-            }
+    if (mcSummary) {
+        const optimalWin = bestOil != null && bestOil >= CONST.OIL_WIN;
+        const mcMostlyLose = mcSummary.victoryRate < 10;
+        if (optimalWin && mcMostlyLose) {
+            console.log('MC note: theoretical win path exists but random strategies rarely reach it — skill/composition gap is large.');
+        } else if (mcSummary.victoryRate >= 50) {
+            console.log('MC note: victory is common even under random play — may be overtuned toward player.');
         }
-        if (!bought) break;
     }
-    return { spent, remaining: rem };
 }
 
-function fleetStats(comp) {
-    let totalDps = 0;
-    let totalHp = 0;
-    let count = 0;
-    for (const o of UNIT_OPTIONS) {
-        const n = comp[o.name] || 0;
-        totalDps += n * o.dps;
-        totalHp += n * o.hp;
-        count += n;
+function main() {
+    const opts = parseArgs(process.argv.slice(2));
+
+    let sheetReport = null;
+    if (!opts.mcOnly) {
+        sheetReport = runBalanceSheet({ argv: opts.overrides, waves: TUNING.WAVES });
+        printBalanceSheet(sheetReport);
     }
-    return { totalDps, totalHp, count };
-}
 
-function simulateOilPath(killFrac, escapeFrac, waves) {
-    let oil = CONST.STARTING_OIL;
-    let funds = CONST.STARTING_FUNDS;
-    const rows = [];
-    for (let w = 1; w <= waves; w++) {
-        const { tankers, escorts, f35 } = waveCounts(w);
-        const kills = Math.round(tankers * killFrac);
-        const escapes = Math.round(tankers * escapeFrac);
-        for (let i = 0; i < kills; i++) oil = applyOilDelta(oil, EXP_OIL_KILL);
-        for (let i = 0; i < escapes; i++) oil = applyOilDelta(oil, EXP_OIL_ESC);
-        funds += escorts * CONST.ESCORT_BONUS * killFrac;
-        funds += f35 * CONST.F35_BONUS * killFrac;
-        rows.push({ wave: w, oil, funds, killFrac });
-        if (w < waves) funds += waveIncome(oil);
+    let mcSummary = null;
+    if (!opts.sheetOnly) {
+        const mc = runMonteCarlo(opts.mcRuns);
+        mcSummary = printMonteCarlo(mc);
     }
-    return rows;
-}
 
-function simulateCampaign(waves) {
-    let funds = CONST.STARTING_FUNDS;
-    let oil = CONST.STARTING_OIL;
-    const comp = {};
-    for (const o of UNIT_OPTIONS) comp[o.name] = 0;
-    const rows = [];
-
-    for (let w = 1; w <= waves; w++) {
-        if (w > 1) funds += waveIncome(oil);
-        const purchase = buyGreedy(funds, comp);
-        funds = purchase.remaining;
-
-        const fleet = fleetStats(comp);
-        const need = convoyDamageRequired(w);
-        const budget = convoyTimeBudget(w);
-        const delivered = fleet.totalDps * budget * TUNING.FLEET_EFFICIENCY;
-        const clearance = need.totalHp > 0 ? delivered / need.totalHp : 0;
-        const killFrac = Math.min(1, clearance);
-        const escapeFrac = Math.max(0, 1 - killFrac);
-
-        const { tankers, escorts, f35 } = waveCounts(w);
-        for (let i = 0; i < Math.round(tankers * killFrac); i++) oil = applyOilDelta(oil, EXP_OIL_KILL);
-        for (let i = 0; i < Math.round(tankers * escapeFrac); i++) oil = applyOilDelta(oil, EXP_OIL_ESC);
-        const milClear = Math.min(1, killFrac * 0.85 + 0.05);
-        funds += escorts * CONST.ESCORT_BONUS * milClear + f35 * CONST.F35_BONUS * milClear;
-
-        const attr = coarseAttrition(w, fleet.count, escorts, f35);
-        for (const o of UNIT_OPTIONS) {
-            comp[o.name] = Math.max(0, Math.round((comp[o.name] || 0) * attr.survival));
-        }
-
-        rows.push({ w, oil, funds, fleet, clearance, killFrac, attr, comp: { ...comp } });
+    if (sheetReport && mcSummary) {
+        printCombinedVerdict(sheetReport, mcSummary);
+    } else if (sheetReport && !mcSummary) {
+        console.log('\n(Sheet only — run without --sheet-only for Monte Carlo self-play.)');
+    } else if (!sheetReport && mcSummary) {
+        console.log('\n(MC only — run without --mc-only for deterministic balance sheet.)');
     }
-    return rows;
 }
 
-function compSummary(comp) {
-    return UNIT_OPTIONS
-        .filter(o => (comp[o.name] || 0) > 0)
-        .map(o => `${comp[o.name]}×${o.name}`)
-        .join(', ') || '(empty)';
-}
-
-// =============================================================================
-// REPORT
-// =============================================================================
-console.log('=== CONVOY BALANCE SHEET (coarse analytical model) ===\n');
-console.log(`Constants from live game | TR-7 path: ${PATH_LEN.toFixed(0)} px`);
-console.log(`Start: $${CONST.STARTING_FUNDS}M, oil $${CONST.STARTING_OIL} | Win $${CONST.OIL_WIN} / Lose $${CONST.OIL_LOSE}`);
-console.log(`Tuning: max fleet=${TUNING.MAX_FLEET_SIZE}, efficiency=${TUNING.FLEET_EFFICIENCY}, CM/salvo=${TUNING.CM_KILLS_PER_SALVO}, survival floor=${TUNING.SURVIVAL_FLOOR}\n`);
-
-console.log('--- 1. Convoy damage pool per wave (HP to destroy all contacts) ---');
-console.log('Wave | Tkr | Esc | F35 | HP×   | Tanker HP | Escort HP | TOTAL HP | Budget(s) | Need DPS');
-console.log('-----|-----|-----|-----|-------|-----------|-----------|----------|-----------|--------');
-
-const waveRows = [];
-for (let w = 1; w <= TUNING.WAVES; w++) {
-    const c = waveCounts(w);
-    const dmg = convoyDamageRequired(w);
-    const budget = convoyTimeBudget(w);
-    const needDps = dmg.totalHp / budget;
-    waveRows.push({ w, c, dmg, budget, needDps });
-    console.log(
-        `${String(w).padStart(4)} | ${String(c.tankers).padStart(3)} | ${String(c.escorts).padStart(3)} | ${String(c.f35).padStart(3)} | ` +
-        `${hpScale(w).toFixed(2).padStart(5)} | ${Math.round(dmg.tankerHp).toLocaleString().padStart(9)} | ${Math.round(dmg.escortHp).toLocaleString().padStart(9)} | ` +
-        `${Math.round(dmg.totalHp).toLocaleString().padStart(8)} | ${budget.toFixed(0).padStart(9)} | ${needDps.toFixed(0).padStart(6)}`
-    );
-}
-
-console.log('\n--- 2. Unit sustained DPS (damage/cooldown, no upgrades) ---');
-UNIT_DEFS.forEach((d, i) => {
-    const sd = sustainedDps(d, i);
-    console.log(`  ${d.shortName.padEnd(12)} $${String(d.cost).padStart(3)}M  ${sd.toFixed(1)} DPS  (${(sd / d.cost).toFixed(3)} DPS/$M)`);
-});
-
-console.log('\n--- 3. Oil trajectories at fixed kill rates (ignores fleet model) ---');
-for (const sc of TUNING.OIL_SCENARIOS) {
-    const traj = simulateOilPath(sc.kill, sc.escape, TUNING.WAVES);
-    const end = traj[traj.length - 1];
-    const hitWin = traj.some(r => r.oil >= CONST.OIL_WIN);
-    const hitLose = traj.some(r => r.oil <= CONST.OIL_LOSE);
-    const samples = [1, 5, 10, 15, 20].map(n => `$${traj[n - 1].oil.toFixed(0)}`).join(' → ');
-    console.log(`  ${sc.name.padEnd(14)} w20 $${end.oil.toFixed(0)}  [${samples}]  win:${hitWin} lose:${hitLose}`);
-}
-
-console.log('\n--- 4. Integrated campaign (greedy buy + clearance → oil + attrition) ---');
-const campaign = simulateCampaign(TUNING.WAVES);
-for (const r of campaign) {
-    console.log(
-        `W${String(r.w).padStart(2)}: ${compSummary(r.comp).slice(0, 40).padEnd(40)} | ` +
-        `${r.fleet.totalDps.toFixed(0)} eff-DPS | clear ×${r.clearance.toFixed(2)} kill ${(100 * r.killFrac).toFixed(0)}% | ` +
-        `surv ${(100 * r.attr.survival).toFixed(0)}% | oil $${r.oil.toFixed(0)} funds $${Math.round(r.funds)}M`
-    );
-}
-
-console.log('\n--- 5. Regime assessment ---');
-const w20Need = waveRows[TUNING.WAVES - 1].needDps;
-const bestOil = simulateOilPath(1, 0, TUNING.WAVES).pop().oil;
-const midOil = simulateOilPath(0.7, 0.3, TUNING.WAVES).pop().oil;
-const worstOil = simulateOilPath(0, 1, TUNING.WAVES).pop().oil;
-const campEnd = campaign[campaign.length - 1];
-
-console.log(`Wave ${TUNING.WAVES} convoy demand: ~${w20Need.toFixed(0)} effective DPS for full clearance`);
-console.log(`Oil @${TUNING.WAVES} if 100% kills: $${bestOil.toFixed(0)} (${bestOil >= CONST.OIL_WIN ? '≥ win' : '< win'})`);
-console.log(`Oil @${TUNING.WAVES} if 70/30 split:  $${midOil.toFixed(0)}`);
-console.log(`Oil @${TUNING.WAVES} if all escape:   $${worstOil.toFixed(0)} (${worstOil <= CONST.OIL_LOSE ? '≤ lose' : '> lose'})`);
-console.log(`Integrated model @${TUNING.WAVES}: oil $${campEnd.oil.toFixed(0)}, avg kill ${(100 * campaign.reduce((s, r) => s + r.killFrac, 0) / campaign.length).toFixed(0)}%`);
-
-let verdict;
-if (bestOil >= CONST.OIL_WIN && midOil < CONST.OIL_WIN && worstOil <= CONST.OIL_LOSE) {
-    verdict = 'INTERMEDIARY — victory reachable at high kill rates; moderate play stalls; total failure collapses oil.';
-} else if (bestOil >= CONST.OIL_WIN && midOil >= CONST.OIL_WIN) {
-    verdict = 'NEAR-OVERKILL — even ~70% kill rates reach win threshold by wave 20.';
-} else if (bestOil < CONST.OIL_WIN) {
-    verdict = 'UNDERTUNED — even perfect kills may not reach win threshold in 20 waves.';
-} else {
-    verdict = 'HARD / ASYMMETRIC — oil swings are sharp; small kill-rate drops punish heavily.';
-}
-console.log(`\nVERDICT: ${verdict}`);
+main();
