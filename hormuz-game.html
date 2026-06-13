@@ -276,15 +276,16 @@
             font-weight: bold;
         }
 
-        /* Phase indicator — below oil price */
+        /* Phase indicator — below oil price HUD box */
         .hud-phase {
             position: absolute;
-            top: 140px;
+            top: 162px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 10;
             text-align: center;
             font-size: 24px;
+            line-height: 1.2;
             pointer-events: none;
             text-shadow: 0 0 6px var(--phosphor-cyan);
         }
@@ -713,12 +714,12 @@
             <table>
                 <thead><tr><th>UNIT</th><th>TIER 1</th><th>TIER 2</th></tr></thead>
                 <tbody>
-                    <tr><td>Silkworm</td><td><strong>Extended Range</strong> (+30% range) $350M</td><td><strong>Dual Targeting</strong> (+25% dps, +20% hp, faster reload) $490M</td></tr>
-                    <tr><td>SAM</td><td><strong>Anti-Ship Module</strong> (+15% range, +20% dps, adds tanker targeting) $210M</td><td><strong>Dual Target + Splash</strong> (+30% dps, +15% hp, 60px splash) $294M</td></tr>
-                    <tr><td>Drone</td><td><strong>Extended Swarm</strong> (6 strikes instead of 3, +15% dps) $63M</td><td><strong>Heavy Swarm</strong> (8 strikes, +10% range, +25% dps) $88M</td></tr>
-                    <tr><td>Heidar-5</td><td><strong>Heavy Mines</strong> (+60% mine damage, faster respawn) $126M</td><td><strong>Dense Field</strong> (+15% placement range, 6 active mines) $176M</td></tr>
-                    <tr><td>FAB</td><td><strong>Fast Attack</strong> (+15% range, +30% dps, +50% patrol speed) $77M</td><td><strong>Torpedo Kit</strong> (+50% dps, +20% hp, burst fire) $108M</td></tr>
-                    <tr><td>Submarine</td><td><strong>Advanced Torpedoes</strong> (+20% range, +25% dps) $420M</td><td><strong>Dual Salvo</strong> (+40% dps, +15% hp, faster reload) $588M</td></tr>
+                    <tr><td>ASCM</td><td><strong>Extended Range</strong> (+30% range) $80M</td><td><strong>Dual Targeting</strong> (+25% dps, +20% hp, faster reload) $95M</td></tr>
+                    <tr><td>SAM</td><td><strong>Anti-Ship Module</strong> (+15% range, +20% dps, adds tanker targeting) $48M</td><td><strong>Dual Target + Splash</strong> (+30% dps, +15% hp, 60px splash) $57M</td></tr>
+                    <tr><td>Drone</td><td><strong>Extended Swarm</strong> (6 strikes instead of 3, +15% dps) $14M</td><td><strong>Heavy Swarm</strong> (8 strikes, +10% range, +25% dps) $17M</td></tr>
+                    <tr><td>Minelayer</td><td><strong>Heavy Mines</strong> (+60% mine damage, faster respawn) $29M</td><td><strong>Dense Field</strong> (+15% placement range, 6 active mines) $34M</td></tr>
+                    <tr><td>FAB</td><td><strong>Fast Attack</strong> (+15% range, +30% dps, +50% patrol speed) $18M</td><td><strong>Torpedo Kit</strong> (+50% dps, +20% hp, burst fire) $21M</td></tr>
+                    <tr><td>Submarine</td><td><strong>Advanced Torpedoes</strong> (+20% range, +25% dps) $96M</td><td><strong>Dual Salvo</strong> (+40% dps, +15% hp, faster reload) $114M</td></tr>
                 </tbody>
             </table>
 
@@ -747,7 +748,7 @@
 
             <h3>TERRAIN &amp; PLACEMENT (select a unit to see overlays)</h3>
             <ul>
-                <li><strong style="color:#00ff88;">Inland sanctuary</strong> &mdash; Mainland interior. Land units (Silkworm, SAM, drone). Escort destroyers cannot engage here.</li>
+                <li><strong style="color:#00ff88;">Inland sanctuary</strong> &mdash; Mainland interior. Land units (ASCM, SAM, drone). Escort destroyers cannot engage here.</li>
                 <li><strong style="color:#ffa500;">Littoral exposure</strong> &mdash; Coast and islands. Land units allowed; within escort destroyer gun range.</li>
                 <li><strong style="color:#00e6cc;">Coast strip</strong> &mdash; Valid Heidar-5 placement only (near water on Iranian territory).</li>
                 <li><strong style="color:#008cff;">Naval deployment</strong> &mdash; Open strait waters. FAB and Ghadir submarine placement.</li>
@@ -1182,7 +1183,7 @@ const UNIT_DEFS = [
     {
         id: 3,
         name: 'Heidar-5 Coastal Minelaying Station',
-        shortName: 'HEIDAR-5',
+        shortName: 'Minelayer',
         icon: 'MNL',
         cost: 90,
         hp: 250,
@@ -5302,7 +5303,7 @@ const RegressionTests = {
 
         // --- ADR 0004: lane mines & terrain zones ---
         this.assert('Heidar-5 mine layer designation',
-            UNIT_DEFS[3].shortName === 'HEIDAR-5');
+            UNIT_DEFS[3].name.includes('Heidar-5') && UNIT_DEFS[3].shortName === 'Minelayer');
         this.assert('Terrain overlay grid built',
             terrainOverlayGrid !== null && terrainOverlayGrid.length === landGrid.length);
         this.assert('Terrain zones are mutually exclusive constants',
@@ -5470,7 +5471,7 @@ const RegressionTests = {
 
         // --- Mine layer combat exclusion ---
         this.assert('Mine layer is defId 3',
-            UNIT_DEFS[3].shortName === 'MINE LAYER' && UNIT_DEFS[3].id === 3);
+            UNIT_DEFS[3].shortName === 'Minelayer' && UNIT_DEFS[3].id === 3);
         this.assert('Mine layer placement is coast',
             UNIT_DEFS[3].placement === 'coast');
         this.assert('Mine layer has maxMines property',
