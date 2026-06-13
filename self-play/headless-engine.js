@@ -234,6 +234,12 @@ function createSimulation(options = {}) {
             game.GameState.refOpen = false;
             game.GameState.spawnQueue = [];
             game.GameState.spawnTimer = 0;
+            game.GameState.salvoRemaining = 0;
+            game.GameState.salvoTick = 0;
+            game.GameState.f14OilMilestonesAwarded = [];
+            game.GameState.routeAlert = '';
+            game.GameState.routeAlertTimer = 0;
+            game.clearDeploymentCells();
             game.GameState.activePaths = ['lane-tr7'];
             game.GameState.totalTime = 0;
             game.GameState.lastTick = 0;

@@ -984,8 +984,44 @@ const UNIT_CLICK_RADIUS = 30;            // px — click/hover detection radius 
 const COAST_WATER_MARGIN = 60;           // px — how close to water for coast placement
 const PATROL_LAND_SKIP_ANGLE = 0.2;      // radians — skip ahead when patrol hits land
 
+// --- ADR 0003: DEPLOYMENT, THREAT ZONES, FLAK, SALVOS (let: rebalancer-overridable) ---
+let DEPLOYMENT_CELL_SIZE = 72;           // px — coarse placement grid pitch
+let DEPLOYMENT_MAX_PER_CELL = 1;         // max units per cell (land/coast share land bucket)
+let CRUISE_MISSILE_SPLASH_RADIUS = 50;   // px — Tomahawk secondary damage radius
+let CRUISE_MISSILE_SPLASH_FRACTION = 0.30;
+let CRUISE_SALVO_MIN = 2;                // missiles per defend-phase opening salvo
+let CRUISE_SALVO_MAX = 6;
+let CRUISE_SALVO_INTERVAL = 0.55;        // seconds between missiles in a salvo
+let THREAT_INLAND_WEIGHT = 1.5;          // Tomahawk target weight mult for mainland interior
+let F35_INLAND_WEIGHT = 1.5;             // F-35 target weight mult for mainland interior
+let FLAK_INTERCEPT_CHANCE = 0.25;        // destroyer CIWS abort chance per roll
+let FLAK_COOLDOWN_SEC = 3.5;             // per-destroyer flak cooldown
+let ISLAND_OVERWATCH_RANGE_BONUS = 1.12; // range mult for ASCM/SAM on Qeshm/Hormuz/Larak
+let FAB_DESTROYER_DPS_MULT = 1.5;        // FAB damage mult vs escort destroyers
+let FAB_PATROL_SPEED = 160;              // px/s — Zolfaghar-class fast attack
+let SHALLOW_WATER_PATROL_MULT = 0.75;    // FAB/sub patrol radius mult in shallow littoral
+let SHALLOW_WATER_MARGIN = 48;           // px — land proximity defining shallow water
+let INTERDICTION_EVERY_N_WAVES = 5;      // coalition interdiction cadence
+let INTERDICTION_TANKER_MULT = 0.55;     // tanker spawn fraction on interdiction waves
+let INTERDICTION_SALVO_MULT = 2.0;       // cruise salvo size mult on interdiction waves
+let CRUISE_MISSILE_DRIP_MULT = 0.35;     // post-salvo steady Tomahawk spawn rate fraction
+let CONVOY_TANKERS_MIN = 2;              // tankers grouped per escort convoy (min)
+let CONVOY_TANKERS_MAX = 4;              // tankers grouped per escort convoy (max)
+let CONVOY_VLCC_LEAD_WAVE = 10;          // wave when convoy lead tanker may be forced VLCC
+const F14_OIL_CHARGE_THRESHOLDS = [120, 160]; // oil $/bbl milestones grant F-14 charges
+
+// Shipping lane metadata (TSS direction + spawn weight skew)
+const PATH_LANE_META = {
+    'lane-tr7':   { label: 'TR-7 OUTBOUND', direction: 'outbound', weightEarly: 1.25, weightLate: 0.85 },
+    'lane-north': { label: 'TSS INBOUND (Qeshm)', direction: 'inbound', weightEarly: 0.75, weightLate: 1.35 },
+    'lane-south': { label: 'TSS OUTBOUND (South)', direction: 'outbound', weightEarly: 1.0, weightLate: 1.0 },
+};
+
+/** Occupied deployment cells: key "land:cx,cy" | "water:cx,cy" */
+const deploymentCells = new Map();
+
 // --- DRONE DEFAULTS ---
-const DRONE_MAX_STRIKES = 4;             // base strikes before depletion
+const DRONE_MAX_STRIKES = 3;             // base strikes before depletion (attrition weapon)
 const DRONE_SPLASH_RADIUS = 40;          // px — splash radius on drone attack
 const DRONE_STRIKES_T1 = 6;             // strikes after Tier 1 upgrade
 const DRONE_STRIKES_T2 = 8;            // strikes after Tier 2 upgrade
@@ -1108,7 +1144,7 @@ const UNIT_DEFS = [
         icon: 'DRN',
         cost: 45,
         hp: 60,
-        dps: 100,
+        dps: 85,
         range: 850,
         cooldown: 4.0,
         placement: 'land',
@@ -1125,7 +1161,7 @@ const UNIT_DEFS = [
     },
     {
         id: 3,
-        name: 'Shahid Baziari Mine Layer',
+        name: 'IRGC Minelaying USV Dispenser',
         shortName: 'MINE LAYER',
         icon: 'MNL',
         cost: 90,
@@ -1147,7 +1183,7 @@ const UNIT_DEFS = [
     },
     {
         id: 4,
-        name: 'Zolfaghar Fast Attack Boat',
+        name: 'Zolfaghar (Peykaap III) Fast Attack',
         shortName: 'FAST ATTACK',
         icon: 'FAB',
         cost: 55,
@@ -1160,7 +1196,7 @@ const UNIT_DEFS = [
         evasion: EVASION_LOW,
         targets: ['tanker', 'destroyer'],
         patrolRadius: 200,
-        patrolSpeed: 120,
+        patrolSpeed: FAB_PATROL_SPEED,
         upgrades: [
             { name: 'Fast Attack', costMult: 1.4, rangeBoost: 0.15, dpsBoost: 0.30, hpBoost: 0, special: 'speed-boost' },
             { name: 'Torpedo Kit', costMult: 1.4, rangeBoost: 0, dpsBoost: 0.50, hpBoost: 0.20, special: 'torpedo-burst' }
@@ -1231,6 +1267,27 @@ if (!HEADLESS && typeof window !== 'undefined' && window.__BALANCE_OVERRIDES) {
             else if (key === 'UPGRADE_COST_FRACTION_TIER1') UPGRADE_COST_FRACTION_TIER1 = value;
             else if (key === 'UPGRADE_COST_FRACTION_TIER2') UPGRADE_COST_FRACTION_TIER2 = value;
             else if (key === 'STARTING_FUNDS') STARTING_FUNDS = value;
+            else if (key === 'DEPLOYMENT_CELL_SIZE') DEPLOYMENT_CELL_SIZE = value;
+            else if (key === 'DEPLOYMENT_MAX_PER_CELL') DEPLOYMENT_MAX_PER_CELL = value;
+            else if (key === 'CRUISE_MISSILE_SPLASH_RADIUS') CRUISE_MISSILE_SPLASH_RADIUS = value;
+            else if (key === 'CRUISE_MISSILE_SPLASH_FRACTION') CRUISE_MISSILE_SPLASH_FRACTION = value;
+            else if (key === 'CRUISE_SALVO_MIN') CRUISE_SALVO_MIN = value;
+            else if (key === 'CRUISE_SALVO_MAX') CRUISE_SALVO_MAX = value;
+            else if (key === 'CRUISE_SALVO_INTERVAL') CRUISE_SALVO_INTERVAL = value;
+            else if (key === 'THREAT_INLAND_WEIGHT') THREAT_INLAND_WEIGHT = value;
+            else if (key === 'F35_INLAND_WEIGHT') F35_INLAND_WEIGHT = value;
+            else if (key === 'FLAK_INTERCEPT_CHANCE') FLAK_INTERCEPT_CHANCE = value;
+            else if (key === 'FLAK_COOLDOWN_SEC') FLAK_COOLDOWN_SEC = value;
+            else if (key === 'ISLAND_OVERWATCH_RANGE_BONUS') ISLAND_OVERWATCH_RANGE_BONUS = value;
+            else if (key === 'FAB_DESTROYER_DPS_MULT') FAB_DESTROYER_DPS_MULT = value;
+            else if (key === 'FAB_PATROL_SPEED') FAB_PATROL_SPEED = value;
+            else if (key === 'SHALLOW_WATER_PATROL_MULT') SHALLOW_WATER_PATROL_MULT = value;
+            else if (key === 'INTERDICTION_TANKER_MULT') INTERDICTION_TANKER_MULT = value;
+            else if (key === 'INTERDICTION_SALVO_MULT') INTERDICTION_SALVO_MULT = value;
+            else if (key === 'CRUISE_MISSILE_DRIP_MULT') CRUISE_MISSILE_DRIP_MULT = value;
+            else if (key === 'CONVOY_TANKERS_MIN') CONVOY_TANKERS_MIN = value;
+            else if (key === 'CONVOY_TANKERS_MAX') CONVOY_TANKERS_MAX = value;
+            else if (key === 'CONVOY_VLCC_LEAD_WAVE') CONVOY_VLCC_LEAD_WAVE = value;
         } catch (_) {}
     }
 }
@@ -1273,6 +1330,17 @@ const GameState = {
     // Spawn queue
     spawnQueue: [],
     spawnTimer: 0,
+
+    // Cruise missile salvo state (defend phase)
+    salvoRemaining: 0,
+    salvoTick: 0,
+
+    // F-14 oil milestone tracking
+    f14OilMilestonesAwarded: [],
+
+    // Route / interdiction HUD alert (text for major intel events only)
+    routeAlert: '',
+    routeAlertTimer: 0,
 
     // Paths unlocked
     activePaths: ['lane-tr7'],
@@ -1626,6 +1694,182 @@ function getPathPosition(pathId, dist) {
     };
 }
 
+// --- Deployment grid & threat-zone helpers (ADR 0003) ---
+
+function getDeploymentCell(x, y) {
+    return {
+        cx: Math.floor(x / DEPLOYMENT_CELL_SIZE),
+        cy: Math.floor(y / DEPLOYMENT_CELL_SIZE),
+    };
+}
+
+function getDeploymentCategory(placementType) {
+    return placementType === 'water' ? 'water' : 'land';
+}
+
+function deploymentCellKey(x, y, placementType) {
+    const { cx, cy } = getDeploymentCell(x, y);
+    return `${getDeploymentCategory(placementType)}:${cx},${cy}`;
+}
+
+function isDeploymentCellOccupied(x, y, placementType) {
+    return deploymentCells.has(deploymentCellKey(x, y, placementType));
+}
+
+function occupyDeploymentCell(unit) {
+    if (unit.deployKey) deploymentCells.set(unit.deployKey, true);
+}
+
+function releaseDeploymentCell(unit) {
+    if (unit.deployKey) deploymentCells.delete(unit.deployKey);
+}
+
+function clearDeploymentCells() {
+    deploymentCells.clear();
+}
+
+/** Mainland interior = Iranian land that is not island or coast strip */
+function landGridAt(x, y) {
+    const col = Math.floor(x / LAND_GRID_CELL);
+    const row = Math.floor(y / LAND_GRID_CELL);
+    if (col < 0 || col >= landGridCols || row < 0 || row >= landGridRows) return 0;
+    return landGrid[row * landGridCols + col];
+}
+
+function classifyThreatZone(x, y, placementType) {
+    if (placementType === 'water') return 'water';
+    if (HEADLESS) {
+        const v = landGridAt(x, y);
+        if (v === 0) return 'water';
+        if (isValidCoastPlacementFast(x, y)) return 'coast';
+        if (v === 3) return 'island';
+        return 'mainland_interior';
+    }
+    if (isValidCoastPlacement(x, y)) return 'coast';
+    if (isPointOnIsland(x, y)) return 'island';
+    return 'mainland_interior';
+}
+
+function destroyerCanTargetUnit(unit) {
+    return unit.threatZone !== 'mainland_interior';
+}
+
+function isOnOverwatchIsland(x, y) {
+    if (HEADLESS) return false;
+    _setSVGPt(x, y);
+    const ids = ['island-qeshm', 'island-hormuz', 'island-larak'];
+    for (const id of ids) {
+        const el = document.getElementById(id);
+        if (el && el.isPointInFill(_svgPt)) return true;
+    }
+    return false;
+}
+
+function isShallowWaterFast(x, y) {
+    if (!isPointInWaterFast(x, y)) return false;
+    const m = SHALLOW_WATER_MARGIN;
+    return !isPointInWaterFast(x + m, y) || !isPointInWaterFast(x - m, y) ||
+           !isPointInWaterFast(x, y + m) || !isPointInWaterFast(x, y - m);
+}
+
+function getInlandThreatWeight(unit, airThreat) {
+    if (unit.threatZone !== 'mainland_interior') return 1;
+    return airThreat ? F35_INLAND_WEIGHT : THREAT_INLAND_WEIGHT;
+}
+
+function pickWeightedActivePath(waveNum) {
+    const paths = GameState.activePaths;
+    const late = waveNum >= 12;
+    let total = 0;
+    const weights = paths.map(p => {
+        const meta = PATH_LANE_META[p] || { weightEarly: 1, weightLate: 1 };
+        const w = late ? meta.weightLate : meta.weightEarly;
+        total += w;
+        return w;
+    });
+    let roll = gameRandom() * total;
+    for (let i = 0; i < paths.length; i++) {
+        roll -= weights[i];
+        if (roll <= 0) return paths[i];
+    }
+    return paths[paths.length - 1];
+}
+
+function getInterdictionSalvoMult(waveNum) {
+    return (waveNum % INTERDICTION_EVERY_N_WAVES === 0) ? INTERDICTION_SALVO_MULT : 1;
+}
+
+function isInterdictionWave(waveNum) {
+    return waveNum % INTERDICTION_EVERY_N_WAVES === 0;
+}
+
+/** Major intel / route alerts — text HUD reserved for these, not routine combat */
+function showRouteAlert(pathId) {
+    const meta = PATH_LANE_META[pathId];
+    if (!meta) return;
+    GameState.routeAlert = `INTEL: ${meta.label} (${meta.direction.toUpperCase()})`;
+    GameState.routeAlertTimer = 4.5;
+}
+
+function showInterdictionAlert() {
+    GameState.routeAlert = 'INTEL: COALITION INTERDICTION — REDUCED CONVOY TRAFFIC';
+    GameState.routeAlertTimer = 4.5;
+}
+
+function initDefendSalvo(waveNum) {
+    const span = CRUISE_SALVO_MAX - CRUISE_SALVO_MIN + 1;
+    let count = CRUISE_SALVO_MIN + Math.floor(gameRandom() * span);
+    count = Math.max(CRUISE_SALVO_MIN, Math.round(count * Math.max(1, waveNum / 4)));
+    count = Math.round(count * getInterdictionSalvoMult(waveNum));
+    GameState.salvoRemaining = count;
+    GameState.salvoTick = 0;
+}
+
+function applyCruiseMissileSplash(hitX, hitY, primary, damage) {
+    if (CRUISE_MISSILE_SPLASH_RADIUS <= 0 || CRUISE_MISSILE_SPLASH_FRACTION <= 0) return;
+    const sr2 = CRUISE_MISSILE_SPLASH_RADIUS * CRUISE_MISSILE_SPLASH_RADIUS;
+    const splashDmg = damage * CRUISE_MISSILE_SPLASH_FRACTION;
+    for (const u of Entities.playerUnits) {
+        if (u === primary || u.hp <= 0) continue;
+        const dx = u.x - hitX, dy = u.y - hitY;
+        if (dx * dx + dy * dy < sr2) {
+            u.hp -= splashDmg;
+            if (u.hp <= 0) spawnEffect(u.x, u.y, '#ff6600', 30, 0.6);
+        }
+    }
+    spawnEffect(hitX, hitY, '#ff9900', CRUISE_MISSILE_SPLASH_RADIUS, 0.45);
+}
+
+function checkF14OilMilestones(prevOil, newOil) {
+    for (const threshold of F14_OIL_CHARGE_THRESHOLDS) {
+        if (GameState.f14OilMilestonesAwarded.includes(threshold)) continue;
+        if (prevOil < threshold && newOil >= threshold && GameState.f14Charges < F14_MAX_CHARGES) {
+            GameState.f14Charges++;
+            GameState.f14OilMilestonesAwarded.push(threshold);
+        }
+    }
+}
+
+/** Destroyer CIWS — abort one drone launch attempt (single strike, not whole launcher) */
+function tryFlakIntercept(droneUnit) {
+    let best = null, bestD2 = Infinity;
+    const range2 = DESTROYER_RANGE * DESTROYER_RANGE;
+    for (const e of Entities.enemies) {
+        if (!e.alive || e.type !== 'destroyer') continue;
+        if ((e.flakCooldown || 0) > 0) continue;
+        const dx = e.x - droneUnit.x, dy = e.y - droneUnit.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < range2 && d2 < bestD2) { best = e; bestD2 = d2; }
+    }
+    if (!best) return false;
+    if (gameRandom() >= FLAK_INTERCEPT_CHANCE) return false;
+    best.flakCooldown = FLAK_COOLDOWN_SEC;
+    spawnEffect(droneUnit.x, droneUnit.y, '#ffcc00', 22, 0.35);
+    spawnEffect(best.x, best.y, '#ffaa44', 14, 0.25);
+    SFX.flakIntercept();
+    return true;
+}
+
 
 /**
  * Validate placement for a given unit definition at world coordinates.
@@ -1642,17 +1886,26 @@ function validatePlacement(unitDef, x, y) {
             if (!(HEADLESS ? isValidLandPlacementFast(x, y) : isValidLandPlacement(x, y))) {
                 return { valid: false, reason: 'MUST PLACE ON IRANIAN TERRITORY' };
             }
+            if (isDeploymentCellOccupied(x, y, 'land')) {
+                return { valid: false, reason: 'DEPLOYMENT CELL OCCUPIED' };
+            }
             return { valid: true, reason: '' };
 
         case 'water':
             if (!(HEADLESS ? isValidWaterPlacementFast(x, y) : isValidWaterPlacement(x, y))) {
                 return { valid: false, reason: 'MUST PLACE IN WATER' };
             }
+            if (isDeploymentCellOccupied(x, y, 'water')) {
+                return { valid: false, reason: 'DEPLOYMENT CELL OCCUPIED' };
+            }
             return { valid: true, reason: '' };
 
         case 'coast':
             if (!(HEADLESS ? isValidCoastPlacementFast(x, y) : isValidCoastPlacement(x, y))) {
                 return { valid: false, reason: 'MUST PLACE ON IRANIAN COAST' };
+            }
+            if (isDeploymentCellOccupied(x, y, 'coast')) {
+                return { valid: false, reason: 'DEPLOYMENT CELL OCCUPIED' };
             }
             return { valid: true, reason: '' };
 
@@ -1688,18 +1941,17 @@ function getWaveDate(waveNumber) {
  * hold, and the more devastating each escape becomes.
  */
 function applyOilDelta(baseDelta) {
+    const prevOil = GameState.oil;
     const price = GameState.oil;
     let factor;
     if (baseDelta > 0) {
-        // Kills: diminishing returns at high prices
         factor = OIL_REFERENCE / price;
     } else {
-        // Escapes: increasingly punishing at high prices
         factor = price / OIL_REFERENCE;
     }
     GameState.oil += baseDelta * factor;
-    // Clamp to avoid negative oil (loss is checked by checkWinLose)
     if (GameState.oil < 0) GameState.oil = 0;
+    checkF14OilMilestones(prevOil, GameState.oil);
 }
 
 /**
@@ -1721,7 +1973,7 @@ function calculateWaveIncome() {
 
 // Cache previous UI values to avoid redundant DOM writes
 const _uiCache = { oil: -1, oilColor: '', funds: -1, wave: -1, stalemate: false,
-                    f14: -1, phase: '', setupTimer: -1, date: '' };
+                    f14: -1, phase: '', setupTimer: -1, date: '', routeAlert: '' };
 // Sidebar dirty-flag: only rebuild when state changes
 let _sidebarDirty = true;
 let _sidebarKey = '';
@@ -1766,12 +2018,17 @@ function updateUI() {
         uiF14Max.innerText = F14_MAX_CHARGES;
     }
 
-    // Phase — includes timer for setup
+    // Phase — includes timer for setup; route intel alert overrides briefly
     const timerKey = GameState.phase === 'setup' ? Math.ceil(GameState.setupTimer) : -1;
-    if (_uiCache.phase !== GameState.phase || _uiCache.setupTimer !== timerKey) {
+    const alertKey = GameState.routeAlertTimer > 0 ? GameState.routeAlert : '';
+    if (_uiCache.phase !== GameState.phase || _uiCache.setupTimer !== timerKey || _uiCache.routeAlert !== alertKey) {
         _uiCache.phase = GameState.phase;
         _uiCache.setupTimer = timerKey;
-        switch (GameState.phase) {
+        _uiCache.routeAlert = alertKey;
+        if (GameState.routeAlertTimer > 0 && GameState.routeAlert) {
+            hudPhase.innerText = GameState.routeAlert;
+            uiStatus.innerText = 'INTEL_UPDATE';
+        } else switch (GameState.phase) {
             case 'setup':
                 hudPhase.innerText = `SETUP PHASE — ${timerKey}s`;
                 uiStatus.innerText = 'DEPLOYING_ASSETS';
@@ -2017,42 +2274,51 @@ function getUpgradeName(unit) {
 }
 
 function createPlayerUnit(def, x, y) {
-    return {
+    let range = def.range;
+    if ((def.placement === 'land' || def.placement === 'coast') && isOnOverwatchIsland(x, y)) {
+        range = Math.round(range * ISLAND_OVERWATCH_RANGE_BONUS);
+    }
+    let patrolRadius = def.patrolRadius || 0;
+    if (def.placement === 'water' && isShallowWaterFast(x, y)) {
+        patrolRadius = Math.round(patrolRadius * SHALLOW_WATER_PATROL_MULT);
+    }
+    const unit = {
         defId: def.id,
         x: x,
         y: y,
         hp: def.hp,
         hpMax: def.hp,
         dps: def.dps,
-        range: def.range,
+        range: range,
         cooldown: def.cooldown,
         cooldownTimer: 0,
         placement: def.placement,
         signature: def.signature,
         evasion: def.evasion,
         targets: [...def.targets],
-        tier: 0,           // 0 = base, 1 = tier 1, 2 = tier 2
+        tier: 0,
+        threatZone: classifyThreatZone(x, y, def.placement),
+        deployKey: deploymentCellKey(x, y, def.placement),
 
-        // Drone-specific
         attritable: def.attritable || false,
         strikesRemaining: def.maxStrikes || 0,
         splashRadius: def.splashRadius || 0,
 
-        // Mine layer-specific
         maxMines: def.maxMines || 0,
         activeMines: 0,
 
-        // FAB-specific
-        patrolRadius: def.patrolRadius || 0,
+        patrolRadius: patrolRadius,
         patrolSpeed: def.patrolSpeed || 0,
         patrolAngle: gameRandom() * Math.PI * 2,
         originX: x,
         originY: y,
 
-        // SAM-specific
         antiMissile: def.antiMissile || false,
         interceptChance: def.interceptChance || 0,
     };
+    occupyDeploymentCell(unit);
+    invalidateCMTargetCache();
+    return unit;
 }
 
 
@@ -2662,6 +2928,24 @@ const SFX = {
         [165, 165, 147, 147].forEach((f, i) =>
             setTimeout(() => playDetunedPair(f, 0.3, 'triangle', 0.12, 3), i * 350));
     },
+
+    /** Destroyer CIWS — sharp metallic crack distinct from missile hits (no HUD text) */
+    flakIntercept() {
+        if (!audioCtx) return;
+        const t = audioCtx.currentTime;
+        playFilteredNoise(0.08, 0.22, 120, 900);
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(420, t);
+        osc.frequency.exponentialRampToValueAtTime(180, t + 0.06);
+        gain.gain.setValueAtTime(0.18 * MASTER_VOLUME, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t);
+        osc.stop(t + 0.09);
+    },
 };
 
 
@@ -2752,6 +3036,11 @@ function update(dt) {
         }
     }
 
+    // Route intel alert timer (major HUD text events)
+    if (GameState.routeAlertTimer > 0) {
+        GameState.routeAlertTimer = Math.max(0, GameState.routeAlertTimer - dt);
+    }
+
     // Check win/lose conditions (only during active gameplay)
     if (GameState.phase === 'setup' || GameState.phase === 'defend' || GameState.phase === 'waveEnd') {
         checkWinLose();
@@ -2767,8 +3056,10 @@ function update(dt) {
 
 function transitionToDefend() {
     GameState.phase = 'defend';
+    initDefendSalvo(GameState.wave);
     GameState.spawnQueue = buildWaveSpawnQueue(GameState.wave);
     GameState.spawnTimer = 0;
+    if (isInterdictionWave(GameState.wave)) showInterdictionAlert();
     SFX.waveStart();
 }
 
@@ -2805,10 +3096,12 @@ function updateActivePaths() {
     if (GameState.wave >= PATH_NORTH_UNLOCK_WAVE && !GameState.activePaths.includes('lane-north')) {
         GameState.activePaths.push('lane-north');
         if (!HEADLESS) document.getElementById('lane-north').style.display = '';
+        showRouteAlert('lane-north');
     }
     if (GameState.wave >= PATH_SOUTH_UNLOCK_WAVE && !GameState.activePaths.includes('lane-south')) {
         GameState.activePaths.push('lane-south');
         if (!HEADLESS) document.getElementById('lane-south').style.display = '';
+        showRouteAlert('lane-south');
     }
 }
 
@@ -2836,6 +3129,11 @@ function buildWaveSpawnQueue(waveNum) {
         f35Count = waveNum >= F35_START_WAVE ? Math.floor((waveNum - F35_START_WAVE + 1) / F35_PER_WAVE_DIV) : 0;
     }
 
+    // Interdiction waves: fewer tankers, heavier standoff pressure (salvo handled separately)
+    if (isInterdictionWave(waveNum)) {
+        tankerCount = Math.max(1, Math.round(tankerCount * INTERDICTION_TANKER_MULT));
+    }
+
     // Wave scaling factors
     const speedScale = Math.pow(1 + WAVE_SPEED_SCALING, waveNum - 1);
     const hpScale = Math.pow(1 + WAVE_HP_SCALING, waveNum - 1);
@@ -2847,11 +3145,11 @@ function buildWaveSpawnQueue(waveNum) {
     const finalSpeedScale = speedScale * unlimitedSpeedMult;
     const finalHpScale = hpScale * unlimitedHpMult;
 
-    // Build tanker entries
-    for (let i = 0; i < tankerCount; i++) {
-        const roll = gameRandom();
+    /** Roll tanker type/stats; forceLarge for convoy lead VLCC in late waves */
+    function rollTankerSpec(forceLarge) {
+        const roll = forceLarge ? 0 : gameRandom();
         let type, hp, speed, oilDestroy, oilEscape;
-        if (roll < TANKER_LARGE_CHANCE) {
+        if (roll < TANKER_LARGE_CHANCE || forceLarge) {
             type = 'tanker-large';
             hp = TANKER_LARGE_HP;
             speed = TANKER_LARGE_SPEED;
@@ -2870,44 +3168,89 @@ function buildWaveSpawnQueue(waveNum) {
             oilDestroy = OIL_SMALL_DESTROY;
             oilEscape = OIL_SMALL_ESCAPE;
         }
-
-        // Assign to a random active path
-        const pathId = GameState.activePaths[Math.floor(gameRandom() * GameState.activePaths.length)];
-
-        queue.push({
-            type, pathId,
+        return {
+            type,
+            pathId: null,
             hp: Math.round(hp * finalHpScale),
             speed: speed * finalSpeedScale,
             oilDestroy, oilEscape,
-        });
+        };
     }
 
-    // Build escort entries
+    const tankerSpecs = [];
+    for (let i = 0; i < tankerCount; i++) {
+        tankerSpecs.push(rollTankerSpec(false));
+    }
+
+    const escortSpecs = [];
     for (let i = 0; i < escortCount; i++) {
-        const pathId = GameState.activePaths[Math.floor(gameRandom() * GameState.activePaths.length)];
-        queue.push({
+        escortSpecs.push({
             type: 'destroyer',
-            pathId,
+            pathId: null,
             hp: Math.round(DESTROYER_HP * finalHpScale),
             speed: DESTROYER_SPEED * finalSpeedScale,
         });
     }
 
-    // Build F-35 entries
+    // Convoy packets: escorts + grouped tankers share a lane (spawn staggered by SPAWN_INTERVAL_SEC)
+    const convoyBlocks = [];
+    let tankerIdx = 0;
+    const convoySpan = Math.max(1, CONVOY_TANKERS_MAX - CONVOY_TANKERS_MIN + 1);
+
+    for (const esc of escortSpecs) {
+        const pathId = pickWeightedActivePath(waveNum);
+        esc.pathId = pathId;
+        const block = [esc];
+        const packetSize = CONVOY_TANKERS_MIN + Math.floor(gameRandom() * convoySpan);
+        const attach = Math.min(packetSize, tankerSpecs.length - tankerIdx);
+        for (let j = 0; j < attach; j++) {
+            const spec = { ...tankerSpecs[tankerIdx++] };
+            if (j === 0 && waveNum >= CONVOY_VLCC_LEAD_WAVE && gameRandom() < 0.45 && spec.type !== 'tanker-large') {
+                spec.type = 'tanker-large';
+                spec.hp = Math.round(TANKER_LARGE_HP * finalHpScale);
+                spec.speed = TANKER_LARGE_SPEED * finalSpeedScale;
+                spec.oilDestroy = OIL_LARGE_DESTROY;
+                spec.oilEscape = OIL_LARGE_ESCAPE;
+            }
+            spec.pathId = pathId;
+            block.push(spec);
+        }
+        convoyBlocks.push(block);
+    }
+
+    // Remaining tankers: lane packets without dedicated escorts
+    while (tankerIdx < tankerSpecs.length) {
+        const pathId = pickWeightedActivePath(waveNum);
+        const block = [];
+        const packetSize = Math.min(CONVOY_TANKERS_MAX, tankerSpecs.length - tankerIdx);
+        for (let j = 0; j < packetSize; j++) {
+            const spec = tankerSpecs[tankerIdx++];
+            spec.pathId = pathId;
+            block.push(spec);
+        }
+        convoyBlocks.push(block);
+    }
+
+    // F-35 sorties (independent of convoy lanes)
+    const f35Entries = [];
     for (let i = 0; i < f35Count; i++) {
-        queue.push({
+        f35Entries.push({
             type: 'f35',
-            pathId: null, // F-35s don't follow shipping lanes
+            pathId: null,
             hp: Math.round(F35_HP * finalHpScale),
             speed: F35_SPEED * finalSpeedScale,
         });
     }
 
-    // Shuffle for varied spawn order (Fisher-Yates)
-    for (let i = queue.length - 1; i > 0; i--) {
+    // Shuffle convoy blocks (not individual ships) for varied spawn order
+    for (let i = convoyBlocks.length - 1; i > 0; i--) {
         const j = Math.floor(gameRandom() * (i + 1));
-        [queue[i], queue[j]] = [queue[j], queue[i]];
+        [convoyBlocks[i], convoyBlocks[j]] = [convoyBlocks[j], convoyBlocks[i]];
     }
+    for (const block of convoyBlocks) {
+        for (const entry of block) queue.push(entry);
+    }
+    for (const entry of f35Entries) queue.push(entry);
 
     return queue;
 }
@@ -3025,6 +3368,9 @@ function updateEnemies(dt) {
         enemy.y = pt.y;
 
         // Destroyers fire at player units while transiting
+        if (enemy.type === 'destroyer' && (enemy.flakCooldown || 0) > 0) {
+            enemy.flakCooldown = Math.max(0, enemy.flakCooldown - dt);
+        }
         updateEnemyCombat(enemy, dt);
     }
 }
@@ -3074,6 +3420,12 @@ function updatePlayerUnits(dt) {
         // Find best target in range
         const target = findTarget(unit);
         if (!target) continue;
+
+        // Destroyer CIWS may abort one drone launch (visuo-auditory feedback only)
+        if (unit.defId === 2 && tryFlakIntercept(unit)) {
+            unit.cooldownTimer = unit.cooldown;
+            continue;
+        }
 
         // Fire projectile
         fireProjectile(unit, target);
@@ -3146,11 +3498,15 @@ function findTarget(unit) {
 
 function fireProjectile(unit, target) {
     const isMissile = target.type === undefined; // cruise missile intercept
+    let dmg = unit.dps;
+    if (unit.defId === 4 && target.type === 'destroyer') {
+        dmg = Math.round(dmg * FAB_DESTROYER_DPS_MULT);
+    }
     Entities.projectiles.push({
         x: unit.x,
         y: unit.y,
         targetRef: target,
-        dmg: unit.dps,
+        dmg: dmg,
         speed: PLAYER_PROJECTILE_SPEED,
         ownerUnit: unit,
         isSplash: unit.splashRadius > 0,
@@ -3288,18 +3644,25 @@ function updateEnemyCombat(enemy, dt) {
 
     for (const u of Entities.playerUnits) {
         if (u.hp <= 0) continue;
-        if (isF35 && u.signature === 'stealth') continue; // F-35s can't target subs
+        if (!isF35 && !destroyerCanTargetUnit(u)) continue;
+        if (isF35 && u.signature === 'stealth') continue;
         const dx = u.x - ex, dy = u.y - ey;
         const d2 = dx * dx + dy * dy;
         if (d2 >= range2) continue;
 
-        // Map signature to priority (lower = preferred)
         let pri;
         if (u.signature === 'low') pri = 0;
         else if (u.signature === 'medium') pri = 1;
         else if (u.signature === 'heavy') pri = 2;
-        else if (u.signature === 'stealth') pri = 3; // destroyers only reach here
+        else if (u.signature === 'stealth') pri = 3;
         else continue;
+
+        // Standoff air/missile threats prioritize mainland interior (not exclusive)
+        if (isF35) {
+            pri -= (getInlandThreatWeight(u, true) - 1) * 0.5;
+        } else if (u.threatZone === 'mainland_interior') {
+            pri -= 0.5;
+        }
 
         if (pri < bestPriority || (pri === bestPriority && d2 < bestD2)) {
             target = u; bestD2 = d2; bestPriority = pri;
@@ -3319,10 +3682,20 @@ function updateEnemyCombat(enemy, dt) {
 }
 
 function updateCruiseMissiles(dt, isSetupPhase) {
-    // Spawn new cruise missiles based on wave intensity
-    const rate = CRUISE_MISSILE_BASE_RATE * GameState.wave * (isSetupPhase ? CRUISE_MISSILE_SETUP_MULT : 1);
-    if (gameRandom() < rate * dt && Entities.playerUnits.length > 0) {
-        spawnCruiseMissile();
+    // Defend phase: opening salvo burst, then reduced drip rate
+    if (!isSetupPhase && GameState.salvoRemaining > 0) {
+        GameState.salvoTick -= dt;
+        if (GameState.salvoTick <= 0 && Entities.playerUnits.length > 0) {
+            spawnCruiseMissile();
+            GameState.salvoRemaining--;
+            GameState.salvoTick = CRUISE_SALVO_INTERVAL;
+        }
+    } else {
+        const dripMult = isSetupPhase ? CRUISE_MISSILE_SETUP_MULT : CRUISE_MISSILE_DRIP_MULT;
+        const rate = CRUISE_MISSILE_BASE_RATE * GameState.wave * dripMult;
+        if (gameRandom() < rate * dt && Entities.playerUnits.length > 0) {
+            spawnCruiseMissile();
+        }
     }
 
     // Update existing cruise missiles (compact-in-place, no splices)
@@ -3356,10 +3729,13 @@ function updateCruiseMissiles(dt, isSetupPhase) {
                 spawnEffect(m.x, m.y, '#666666', 15, 0.4);
             } else {
                 // Hit!
-                m.targetRef.hp -= CRUISE_MISSILE_DAMAGE;
-                spawnEffect(m.targetRef.x, m.targetRef.y, '#ff0000', 35, 1.0);
-                if (m.targetRef.hp <= 0) {
-                    spawnEffect(m.targetRef.x, m.targetRef.y, '#ff6600', 50, 1.2);
+                const target = m.targetRef;
+                const dmg = CRUISE_MISSILE_DAMAGE;
+                target.hp -= dmg;
+                applyCruiseMissileSplash(m.x, m.y, target, dmg);
+                spawnEffect(target.x, target.y, '#ff0000', 35, 1.0);
+                if (target.hp <= 0) {
+                    spawnEffect(target.x, target.y, '#ff6600', 50, 1.2);
                 }
             }
             continue; // consumed
@@ -3428,6 +3804,7 @@ function pickCruiseMissileTarget() {
                 case 'low':    w = SIGNATURE_WEIGHT_LOW; break;
                 default:       w = 0;
             }
+            w *= getInlandThreatWeight(u, false);
             cands.push(u);
             weights.push(w);
             totalWeight += w;
@@ -3689,7 +4066,11 @@ function removeDeadEntities() {
     dst = 0;
     const units = Entities.playerUnits;
     for (let i = 0; i < units.length; i++) {
-        if (units[i].hp > 0) units[dst++] = units[i];
+        if (units[i].hp > 0) {
+            units[dst++] = units[i];
+        } else {
+            releaseDeploymentCell(units[i]);
+        }
     }
     units.length = dst;
     // Projectiles, missiles cleaned up in their respective update functions
@@ -4398,6 +4779,12 @@ function gameLoop(timestamp) {
 
 function startGame() {
     if (!HEADLESS) document.getElementById('screen-intro').classList.add('hidden');
+    clearDeploymentCells();
+    GameState.salvoRemaining = 0;
+    GameState.salvoTick = 0;
+    GameState.f14OilMilestonesAwarded = [];
+    GameState.routeAlert = '';
+    GameState.routeAlertTimer = 0;
     GameState.phase = 'setup';
     GameState.setupTimer = SETUP_PHASE_DURATION;
     GameState.oil = STARTING_OIL_PRICE;
@@ -4689,9 +5076,21 @@ const RegressionTests = {
 
         const w3Queue = buildWaveSpawnQueue(3);
         const w3Escorts = w3Queue.filter(e => e.type === 'destroyer');
+        const w3Tankers = w3Queue.filter(e => e.type.startsWith('tanker'));
         this.assert('Wave 3: 1 escort',
             w3Escorts.length === 1,
             `Got ${w3Escorts.length}`);
+        if (w3Escorts.length > 0) {
+            const escortPaths = new Set(w3Escorts.map(e => e.pathId));
+            const shared = w3Tankers.some(t => escortPaths.has(t.pathId));
+            this.assert('Convoy escorts share lane with tankers', shared);
+        }
+
+        const w4Tankers = buildWaveSpawnQueue(4).filter(e => e.type.startsWith('tanker')).length;
+        const w5Tankers = buildWaveSpawnQueue(5).filter(e => e.type.startsWith('tanker')).length;
+        this.assert('Interdiction wave reduces tanker count',
+            w5Tankers < w4Tankers,
+            `w4=${w4Tankers} w5=${w5Tankers}`);
 
         const w6Queue = buildWaveSpawnQueue(6);
         const w6F35s = w6Queue.filter(e => e.type === 'f35');
@@ -4701,6 +5100,34 @@ const RegressionTests = {
 
         // Restore state
         Object.assign(GameState, savedState);
+
+        // --- ADR 0003: balance / verisimilitude ---
+        this.assert('Destroyer cannot target mainland interior',
+            !destroyerCanTargetUnit({ threatZone: 'mainland_interior' }));
+        this.assert('Destroyer can target coast',
+            destroyerCanTargetUnit({ threatZone: 'coast' }));
+
+        this.assert('Inland Tomahawk weight > 1',
+            getInlandThreatWeight({ threatZone: 'mainland_interior' }, false) === THREAT_INLAND_WEIGHT);
+        this.assert('Coastal Tomahawk weight = 1',
+            getInlandThreatWeight({ threatZone: 'coast' }, false) === 1);
+
+        clearDeploymentCells();
+        const landDef = UNIT_DEFS[0];
+        const cellA = validatePlacement(landDef, 600, 100);
+        this.assert('Land placement valid on Iran', cellA.valid);
+        const u = createPlayerUnit(landDef, 600, 100);
+        const cellB = validatePlacement(landDef, 610, 110);
+        this.assert('Deployment cell blocks second land unit',
+            !cellB.valid && cellB.reason === 'DEPLOYMENT CELL OCCUPIED');
+        releaseDeploymentCell(u);
+
+        const salvoSaved = GameState.salvoRemaining;
+        initDefendSalvo(8);
+        this.assert('Defend salvo count within bounds',
+            GameState.salvoRemaining >= CRUISE_SALVO_MIN &&
+            GameState.salvoRemaining <= CRUISE_SALVO_MAX * 4);
+        GameState.salvoRemaining = salvoSaved;
 
         // --- Phase transition tests ---
         this.assert('Stalemate wave = 20',
@@ -4922,6 +5349,7 @@ const RegressionTests = {
             typeof SFX.torpedoLaunch === 'function' &&
             typeof SFX.droneAttack === 'function' &&
             typeof SFX.cruiseMissileWarning === 'function' &&
+            typeof SFX.flakIntercept === 'function' &&
             typeof SFX.oilUp === 'function' &&
             typeof SFX.oilDown === 'function' &&
             typeof SFX.victory === 'function' &&
@@ -5001,7 +5429,7 @@ if (typeof module !== 'undefined' && module.exports) {
         update, startGame, checkWinLose,
         // Unit management
         createPlayerUnit, validatePlacement, upgradeUnit, activateF14,
-        selectUnitType, buildWaveSpawnQueue,
+        selectUnitType, buildWaveSpawnQueue, clearDeploymentCells,
         // Economy
         applyOilDelta, calculateWaveIncome,
         // Geometry
