@@ -1,0 +1,4 @@
+{
+  "name": "hormuz-self-play-balance",
+  "install": "node --version && npm ci"
+}

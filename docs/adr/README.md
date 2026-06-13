@@ -11,6 +11,7 @@ Per **AGENTS.md**, substantive features are preceded by an ADR. Records use the 
 | [0003](./0003-balance-verisimilitude-layered-threat.md) | Balance, verisimilitude, layered threat geography | Accepted |
 | [0004](./0004-placement-ux-minelaying-and-terrain-overlays.md) | Placement UX, lane-locked minelaying, terrain overlays | Accepted |
 | [0005](./0005-performance-adaptive-wave-difficulty.md) | Performance-adaptive wave difficulty (convoy pressure only) | Accepted |
+| [0006](./0006-cloud-self-play-balance.md) | Cloud self-play balance workflow (Cursor Automations primary) | Accepted |
 
 ## How to add an ADR
 

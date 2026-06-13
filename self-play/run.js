@@ -8,6 +8,7 @@
  *   node run.js balance [--cycles=N]          Run full autonomous balance loop
  *                       [--no-commit]          Skip git commit/push
  *                       [--no-push]            Commit but don't push
+ *                       [--dry-run]            Alias for --no-commit
  *   node run.js test                          Quick smoke test of headless engine
  */
 
@@ -23,7 +24,7 @@ const { randomGenome } = require('./strategy-genome');
 const AutoPlayer = require('./auto-player');
 const { computeFitness } = require('./fitness');
 const { SeededRNG } = require('./prng');
-const { writeConfig, commitConfig, pushConfig } = require('./config-writer');
+const { writeConfig, commitConfig, pushConfig, isUnattendedRun } = require('./config-writer');
 
 // Parse simple args
 function parseArgs() {
@@ -190,16 +191,19 @@ function commandBalance(args) {
     const maxCycles = parseInt(args.cycles) || 5;
     const genPerCycle = parseInt(args.gen) || 30;
     const populationSize = parseInt(args.pop) || 50;
-    const noCommit = args['no-commit'] === true;
+    const noCommit = args['no-commit'] === true || args['dry-run'] === true;
     const noPush = args['no-push'] === true;
+    const unattended = isUnattendedRun();
 
     console.log(`Autonomous balance loop: ${maxCycles} cycles, ${genPerCycle} gen/cycle, pop ${populationSize}`);
-    if (noCommit) console.log('  (--no-commit: skipping git operations)');
+    if (noCommit) console.log('  (--no-commit / --dry-run: skipping git operations)');
     if (noPush) console.log('  (--no-push: skipping git push)');
+    if (unattended) console.log('  (unattended: git failures will exit non-zero)');
     console.log();
 
     let constantOverrides = {};
     const rebalancer = new Rebalancer();
+    let gitFailed = false;
 
     for (let cycle = 0; cycle < maxCycles; cycle++) {
         console.log(`\n${'='.repeat(60)}`);
@@ -281,15 +285,23 @@ function commandBalance(args) {
 
         // --- Git commit + push ---
         if (!noCommit) {
-            const hash = commitConfig(metadata);
-            if (hash) {
-                console.log(`  Committed: ${hash}`);
+            const commitResult = commitConfig(metadata);
+            if (commitResult.ok && commitResult.skipped) {
+                console.log('  No config changes to commit');
+            } else if (commitResult.ok && commitResult.hash) {
+                console.log(`  Committed: ${commitResult.hash}`);
                 if (!noPush) {
-                    const pushed = pushConfig();
-                    if (pushed) {
+                    const pushResult = pushConfig();
+                    if (pushResult.ok) {
                         console.log('  Pushed to origin/self-play');
+                    } else {
+                        gitFailed = true;
+                        console.error('  Push failed');
                     }
                 }
+            } else {
+                gitFailed = true;
+                console.error('  Commit failed');
             }
         }
 
@@ -297,6 +309,10 @@ function commandBalance(args) {
     }
 
     console.log('\nBalance loop complete.');
+
+    if (gitFailed && (unattended || !noCommit)) {
+        process.exit(1);
+    }
 }
 
 // --- Main ---
