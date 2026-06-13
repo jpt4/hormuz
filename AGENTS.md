@@ -35,3 +35,22 @@ Project Specific:
 15. Prefer structured tools (MCP servers, LSP servers, existing utilities, etc.) where possible, when they support a desired behavior. Use ad hoc scripts and function reimplementation only as secondary support when such tools are insufficient, absent, unnecessary overhead for the task at hand, or the specific use case merits additional documentation in the form of custom code.
 
 16. **Dual top-level branches (this repository):** In addition to the usual **`master`** integration line described in §5 above, **`self-play`** is a second **long-lived, top-level** branch—not throwaway scaffolding. **`master`** and **`self-play`** each may serve as the **root** from which ADR-scoped implementation branches fork and into which completed ADR merges are **recollected** for **that line’s** roadmap. **`self-play`** is **explicitly expected to diverge** from **`master`**: evolutionary balance outputs, tuner experiments in **`self-play/`**, and automation-driven commits are normal there and **do not** presume a full reciprocal merge onto **`master`**. Likewise, **`master`** is **not** required to ingest every **`self-play`** commit, and **`self-play`** is **not** required to ingest every **`master`** change. **Synchronization is selective:** when specific shared concerns warrant it—shared engine or UI fixes, economy rules affecting both deployments, parity for a deliberate release—you merge or cherry-pick **only those changes** in whichever direction applies (**`master` → `self-play`**, **`self-play` → `master`**, or both for different files). Do not assume either branch will eventually absorb the other wholesale; preserve both remote branches—see **`README.md`** and deployment workflows for canonical vs experimental Pages builds.
+
+## Cursor Cloud specific instructions
+
+This is a pure-Node + single-file-browser project; there is **no build step** and **no runtime npm dependencies** (`package-lock.json` is intentionally empty — it exists only for CI reproducibility). The startup update script runs `npm ci`, which is effectively a no-op but validates the lockfile. Node 18+ is required (the VM ships Node 22).
+
+Standard commands (defined in `package.json`, see `README.md` for context):
+
+- Fast test suite: `npm test` (Node `--test` contract tests under `self-play/test/`).
+- Extended suite: `npm run test:extended` (full headless game smoke via `node self-play/run.js test`). Per §13–14, run this before commits that change game logic used by the headless engine or self-play pipeline.
+- Both: `npm run test:all`.
+
+Running the browser game: it is the self-contained file `hormuz-game.html` (no bundling). Serve the repo root with any static server and open the file, e.g. `python3 -m http.server 8000` then `http://localhost:8000/hormuz-game.html`. The HTML embeds an in-browser regression suite (`§17`) that **auto-runs on page load** (results to the devtools console) and can be re-run with **Ctrl+T**.
+
+Non-obvious gotchas discovered during setup:
+
+- **Browser placement zones:** "land" units (ASCM Battery, SAM Site, Drone Swarm) can only be placed on the **Iranian (northern) landmass**; "coast"/"water" units have their own zones. Clicks on water or the southern Arabian side are silently denied (`console.warn` only). A successful placement deducts the unit cost from `FUNDS`. Placement is allowed during both the setup and defend phases.
+- **No browser global API:** the game's functions/state are exposed via `module.exports` **for the Node self-play engine only** — they are NOT attached to `window`. You cannot drive or inspect the game from the browser devtools console; GUI testing must use real mouse/keyboard interaction.
+- **`self-play/run.js balance` auto-commits (and pushes):** the balance loop writes a timestamped config to `self-play/configs/`, mutates `balance-config.js`, and **git-commits** each cycle (and pushes unless `--no-push`). Use `--no-commit`/`--dry-run` when experimenting so you don't leave commits on your working branch.
+- The headless engine and the browser game share the same game-balance logic, so `npm run test:extended` exercises real unit placement/combat headlessly (it logs e.g. `Placed DRONE SWARM at (600, 200)`), which is the most deterministic way to verify core gameplay.
