@@ -1,6 +1,6 @@
 # ADR 0005: Performance-adaptive wave difficulty (convoy pressure only)
 
-- **Status:** Accepted (design); implementation pending
+- **Status:** Accepted
 - **Date:** 2026-06-13
 
 ## Context

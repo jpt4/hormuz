@@ -10,7 +10,7 @@ Per **AGENTS.md**, substantive features are preceded by an ADR. Records use the 
 | [0002](./0002-upgrade-pricing-as-fraction-of-base.md) | Upgrade gold cost as fractions of base unit price | Accepted |
 | [0003](./0003-balance-verisimilitude-layered-threat.md) | Balance, verisimilitude, layered threat geography | Accepted |
 | [0004](./0004-placement-ux-minelaying-and-terrain-overlays.md) | Placement UX, lane-locked minelaying, terrain overlays | Accepted |
-| [0005](./0005-performance-adaptive-wave-difficulty.md) | Performance-adaptive wave difficulty (convoy pressure only) | Accepted (design) |
+| [0005](./0005-performance-adaptive-wave-difficulty.md) | Performance-adaptive wave difficulty (convoy pressure only) | Accepted |
 
 ## How to add an ADR
 

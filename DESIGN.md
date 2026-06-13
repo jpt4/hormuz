@@ -70,7 +70,7 @@ All constants declared at top of code for tuning.
 ```
 
 - **Setup Phase (15 seconds):** Player receives wave income and places/upgrades units. Cruise missiles still attack during setup, but at **reduced intensity** (`CRUISE_MISSILE_SETUP_MULT`).
-- **Adaptive convoy pressure (ADR 0005, planned):** After each wave, a **Performance Pressure Index** from the prior wave’s combat report adjusts **next-wave** tanker/escort/F-35 counts and cruise-missile salvo/drip rates. **Oil price deltas and wave income are not modified** — adaptive scaling affects only how hard it is to move price by killing convoys. See `docs/adr/0005-performance-adaptive-wave-difficulty.md`.
+- **Adaptive convoy pressure (ADR 0005):** After each wave, a **Performance Pressure Index** from the prior wave’s combat report adjusts **next-wave** tanker/escort/F-35 counts and cruise-missile salvo/drip rates. **Oil price deltas and wave income are not modified** — adaptive scaling affects only how hard it is to move price by killing convoys. Disabled in **training** difficulty. See `docs/adr/0005-performance-adaptive-wave-difficulty.md`.
 - **Defend Phase:** Convoy spawns and traverses the Strait. All enemy units active at full intensity. Player may still place and upgrade units during this phase.
 - **Wave End:** When all convoy units are destroyed or have escaped, the wave ends. Player receives funding for the next wave.
 

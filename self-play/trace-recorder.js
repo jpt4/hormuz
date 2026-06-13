@@ -32,6 +32,8 @@ class TraceRecorder {
             unitCounts: [...unitCounts],
             enemyCount: observation.enemies.length,
             f14Charges: observation.f14Charges,
+            adaptive: observation.adaptive ? { ...observation.adaptive } : null,
+            lastWaar: observation.lastWaar || null,
         });
     }
 

@@ -300,6 +300,10 @@ function createSimulation(options = {}) {
                 f14Cooldown: gs.f14Cooldown,
                 activePaths: [...gs.activePaths],
                 passedStalemate: gs.passedStalemate,
+                adaptive: gs.adaptive ? { ...gs.adaptive } : null,
+                lastWaar: gs.waarHistory.length > 0
+                    ? gs.waarHistory[gs.waarHistory.length - 1]
+                    : null,
             };
         },
 

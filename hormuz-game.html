@@ -1023,6 +1023,28 @@ let CONVOY_TANKERS_MAX = 4;              // tankers grouped per escort convoy (m
 let CONVOY_VLCC_LEAD_WAVE = 10;          // wave when convoy lead tanker may be forced VLCC
 const F14_OIL_CHARGE_THRESHOLDS = [120, 160]; // oil $/bbl milestones grant F-14 charges
 
+// --- ADR 0005: PERFORMANCE-ADAPTIVE WAVE DIFFICULTY (spawn pressure only; oil untouched) ---
+let ADAPTIVE_DIFFICULTY_ENABLED = true;
+let ADAPT_SPAN = 0.25;                   // max ± pressure around neutral PPI 0.5
+let ADAPT_SMOOTH_ALPHA = 0.35;           // lerp toward target each wave boundary
+let ADAPT_FLOOR = 0.70;
+let ADAPT_CEIL = 1.35;
+let ADAPT_W_KILL = 0.30;
+let ADAPT_W_MIL = 0.15;
+let ADAPT_W_SURV = 0.20;
+let ADAPT_W_HP = 0.10;
+let ADAPT_W_SPEED = 0.15;
+let ADAPT_W_SAM = 0.05;
+let ADAPT_W_LEAK = 0.25;
+let ADAPT_TANKER_GAIN = 0.6;
+let ADAPT_ESCORT_GAIN = 0.9;
+let ADAPT_F35_GAIN = 1.0;
+let ADAPT_CRUISE_GAIN = 1.2;
+const ADAPT_WAAR_HISTORY_MAX = 5;
+const ADAPT_SURGE_ALERT_DELTA = 0.15;    // |Δcruise| triggers coalition surge intel
+const ADAPT_EXP_TANKER_SPEED =
+    0.55 * TANKER_SMALL_SPEED + 0.30 * TANKER_MED_SPEED + 0.15 * TANKER_LARGE_SPEED;
+
 // Shipping lane metadata (TSS direction + spawn weight skew)
 const PATH_LANE_META = {
     'lane-tr7':   { label: 'TR-7 OUTBOUND', direction: 'outbound', weightEarly: 1.25, weightLate: 0.85 },
@@ -1309,6 +1331,22 @@ if (!HEADLESS && typeof window !== 'undefined' && window.__BALANCE_OVERRIDES) {
             else if (key === 'CONVOY_TANKERS_MIN') CONVOY_TANKERS_MIN = value;
             else if (key === 'CONVOY_TANKERS_MAX') CONVOY_TANKERS_MAX = value;
             else if (key === 'CONVOY_VLCC_LEAD_WAVE') CONVOY_VLCC_LEAD_WAVE = value;
+            else if (key === 'ADAPTIVE_DIFFICULTY_ENABLED') ADAPTIVE_DIFFICULTY_ENABLED = value;
+            else if (key === 'ADAPT_SPAN') ADAPT_SPAN = value;
+            else if (key === 'ADAPT_SMOOTH_ALPHA') ADAPT_SMOOTH_ALPHA = value;
+            else if (key === 'ADAPT_FLOOR') ADAPT_FLOOR = value;
+            else if (key === 'ADAPT_CEIL') ADAPT_CEIL = value;
+            else if (key === 'ADAPT_W_KILL') ADAPT_W_KILL = value;
+            else if (key === 'ADAPT_W_MIL') ADAPT_W_MIL = value;
+            else if (key === 'ADAPT_W_SURV') ADAPT_W_SURV = value;
+            else if (key === 'ADAPT_W_HP') ADAPT_W_HP = value;
+            else if (key === 'ADAPT_W_SPEED') ADAPT_W_SPEED = value;
+            else if (key === 'ADAPT_W_SAM') ADAPT_W_SAM = value;
+            else if (key === 'ADAPT_W_LEAK') ADAPT_W_LEAK = value;
+            else if (key === 'ADAPT_TANKER_GAIN') ADAPT_TANKER_GAIN = value;
+            else if (key === 'ADAPT_ESCORT_GAIN') ADAPT_ESCORT_GAIN = value;
+            else if (key === 'ADAPT_F35_GAIN') ADAPT_F35_GAIN = value;
+            else if (key === 'ADAPT_CRUISE_GAIN') ADAPT_CRUISE_GAIN = value;
         } catch (_) {}
     }
 }
@@ -1368,6 +1406,11 @@ const GameState = {
 
     // Paths unlocked
     activePaths: ['lane-tr7'],
+
+    // ADR 0005: adaptive spawn pressure (oil economy unchanged)
+    adaptive: { tanker: 1.0, escort: 1.0, f35: 1.0, cruise: 1.0, lastPpi: null },
+    waar: null,
+    waarHistory: [],
 };
 
 
@@ -1901,11 +1944,170 @@ function showInterdictionAlert() {
     GameState.routeAlertTimer = 4.5;
 }
 
-function initDefendSalvo(waveNum) {
+/** Fresh Wave After-Action Report tallies for the current defend phase. */
+function createEmptyWaar() {
+    return {
+        playerUnitsDefendStart: 0,
+        playerHpDefendStart: 0,
+        playerUnitsWaveEnd: 0,
+        playerHpWaveEnd: 0,
+        tankersSpawned: 0,
+        tankersKilled: 0,
+        tankersEscaped: 0,
+        escortsSpawned: 0,
+        escortsKilled: 0,
+        f35Spawned: 0,
+        f35Killed: 0,
+        defendDurationSec: 0,
+        expectedDefendDurationSec: 0,
+        cruiseMissilesFired: 0,
+        samIntercepts: 0,
+        f14StrikesUsed: 0,
+    };
+}
+
+function resetAdaptiveState() {
+    GameState.adaptive = { tanker: 1.0, escort: 1.0, f35: 1.0, cruise: 1.0, lastPpi: null };
+    GameState.waar = createEmptyWaar();
+    GameState.waarHistory = [];
+}
+
+function adaptiveDifficultyActive() {
+    return ADAPTIVE_DIFFICULTY_ENABLED && GameState.difficulty !== 'training';
+}
+
+function getAdaptiveMult(channel) {
+    if (!adaptiveDifficultyActive()) return 1.0;
+    return GameState.adaptive[channel] || 1.0;
+}
+
+function applyAdaptiveCount(baseline, channel) {
+    if (!adaptiveDifficultyActive()) return baseline;
+    return Math.max(0, Math.round(baseline * getAdaptiveMult(channel)));
+}
+
+function snapshotWaarDefendStart() {
+    const w = GameState.waar;
+    w.playerUnitsDefendStart = Entities.playerUnits.filter(u => u.hp > 0).length;
+    w.playerHpDefendStart = 0;
+    for (const u of Entities.playerUnits) {
+        if (u.hp > 0) w.playerHpDefendStart += u.hp;
+    }
+}
+
+function computeExpectedDefendDurationSec(queueSize, waveNum) {
+    const spawnWindow = Math.max(0, queueSize - 1) * SPAWN_INTERVAL_SEC;
+    const speedScale = Math.pow(1 + WAVE_SPEED_SCALING, waveNum - 1);
+    const tr7 = pathCache['lane-tr7'];
+    const transit = tr7 && tr7.totalLength > 0
+        ? tr7.totalLength / (ADAPT_EXP_TANKER_SPEED * speedScale)
+        : 60;
+    return spawnWindow + transit;
+}
+
+function clamp01(v) { return Math.max(0, Math.min(1, v)); }
+
+/** Performance Pressure Index — higher means player dominated the wave. */
+function computePerformancePressureIndex(waar) {
+    const killRate = waar.tankersKilled / Math.max(1, waar.tankersSpawned);
+    const leakRate = waar.tankersEscaped / Math.max(1, waar.tankersSpawned);
+    const milSpawned = waar.escortsSpawned + waar.f35Spawned;
+    const milKillRate = (waar.escortsKilled + waar.f35Killed) / Math.max(1, milSpawned);
+    const survivalRate = waar.playerUnitsWaveEnd / Math.max(1, waar.playerUnitsDefendStart);
+    const hpRetention = waar.playerHpWaveEnd / Math.max(1, waar.playerHpDefendStart);
+    const speedRatio = Math.max(0.5, Math.min(2.0,
+        waar.expectedDefendDurationSec / Math.max(1, waar.defendDurationSec)));
+    const speedScore = (speedRatio - 0.5) / 1.5;
+    const standoffRelief = clamp01(waar.samIntercepts / Math.max(1, waar.cruiseMissilesFired));
+
+    const ppi = ADAPT_W_KILL * killRate
+        + ADAPT_W_MIL * milKillRate
+        + ADAPT_W_SURV * survivalRate
+        + ADAPT_W_HP * hpRetention
+        + ADAPT_W_SPEED * speedScore
+        + ADAPT_W_SAM * standoffRelief
+        - ADAPT_W_LEAK * leakRate;
+    return clamp01(ppi);
+}
+
+function adaptiveTargetMult(pressure, gain) {
+    return 1 + ADAPT_SPAN * pressure * gain;
+}
+
+function updateAdaptiveFromPpi(ppi) {
+    const pressure = (ppi - 0.5) * 2;
+    const prevCruise = GameState.adaptive.cruise;
+    const targets = {
+        tanker: adaptiveTargetMult(pressure, ADAPT_TANKER_GAIN),
+        escort: adaptiveTargetMult(pressure, ADAPT_ESCORT_GAIN),
+        f35: adaptiveTargetMult(pressure, ADAPT_F35_GAIN),
+        cruise: adaptiveTargetMult(pressure, ADAPT_CRUISE_GAIN),
+    };
+    for (const key of Object.keys(targets)) {
+        const next = GameState.adaptive[key] + ADAPT_SMOOTH_ALPHA * (targets[key] - GameState.adaptive[key]);
+        GameState.adaptive[key] = Math.max(ADAPT_FLOOR, Math.min(ADAPT_CEIL, next));
+    }
+    GameState.adaptive.lastPpi = ppi;
+    if (GameState.adaptive.cruise - prevCruise >= ADAPT_SURGE_ALERT_DELTA) {
+        GameState.routeAlert = 'INTEL: COALITION SURGE — INCREASED STANDOFF TEMPO';
+        GameState.routeAlertTimer = 4.5;
+    }
+}
+
+function recordWaarSpawn(enemyType) {
+    if (!GameState.waar) return;
+    if (enemyType.startsWith('tanker')) GameState.waar.tankersSpawned++;
+    else if (enemyType === 'destroyer') GameState.waar.escortsSpawned++;
+    else if (enemyType === 'f35') GameState.waar.f35Spawned++;
+}
+
+function recordWaarKill(enemyType) {
+    if (!GameState.waar) return;
+    if (enemyType.startsWith('tanker')) GameState.waar.tankersKilled++;
+    else if (enemyType === 'destroyer') GameState.waar.escortsKilled++;
+    else if (enemyType === 'f35') GameState.waar.f35Killed++;
+}
+
+function recordWaarEscape() {
+    if (GameState.waar) GameState.waar.tankersEscaped++;
+}
+
+function finalizeWavePerformance() {
+    const w = GameState.waar;
+    if (!w) return;
+
+    w.playerUnitsWaveEnd = Entities.playerUnits.filter(u => u.hp > 0).length;
+    w.playerHpWaveEnd = 0;
+    for (const u of Entities.playerUnits) {
+        if (u.hp > 0) w.playerHpWaveEnd += u.hp;
+    }
+
+    if (!adaptiveDifficultyActive()) return;
+
+    const ppi = computePerformancePressureIndex(w);
+    updateAdaptiveFromPpi(ppi);
+    GameState.waarHistory.push({
+        wave: GameState.wave,
+        ppi,
+        adaptive: { ...GameState.adaptive },
+        waar: { ...w },
+    });
+    if (GameState.waarHistory.length > ADAPT_WAAR_HISTORY_MAX) {
+        GameState.waarHistory.shift();
+    }
+}
+
+function computeBaselineSalvoCount(waveNum) {
     const span = CRUISE_SALVO_MAX - CRUISE_SALVO_MIN + 1;
     let count = CRUISE_SALVO_MIN + Math.floor(gameRandom() * span);
     count = Math.max(CRUISE_SALVO_MIN, Math.round(count * Math.max(1, waveNum / 4)));
     count = Math.round(count * getInterdictionSalvoMult(waveNum));
+    return count;
+}
+
+function initDefendSalvo(waveNum) {
+    let count = computeBaselineSalvoCount(waveNum);
+    count = Math.max(CRUISE_SALVO_MIN, Math.round(count * getAdaptiveMult('cruise')));
     GameState.salvoRemaining = count;
     GameState.salvoTick = 0;
 }
@@ -2511,6 +2713,7 @@ function activateF14() {
 
     GameState.f14Charges--;
     GameState.f14Cooldown = F14_COOLDOWN_SEC;
+    if (GameState.waar) GameState.waar.f14StrikesUsed++;
     SFX.f14Flyby();
 
     // Create F-14 sweep entity — flies across the map hitting naval targets
@@ -3082,6 +3285,7 @@ function update(dt) {
         case 'defend':
             // Spawn enemies from queue
             updateSpawnQueue(dt);
+            if (GameState.waar) GameState.waar.defendDurationSec += dt;
             // Update all entities
             updateEnemies(dt);
             updatePlayerUnits(dt);
@@ -3143,8 +3347,12 @@ function update(dt) {
 
 function transitionToDefend() {
     GameState.phase = 'defend';
+    GameState.waar = createEmptyWaar();
+    snapshotWaarDefendStart();
     initDefendSalvo(GameState.wave);
     GameState.spawnQueue = buildWaveSpawnQueue(GameState.wave);
+    GameState.waar.expectedDefendDurationSec =
+        computeExpectedDefendDurationSec(GameState.spawnQueue.length, GameState.wave);
     GameState.spawnTimer = 0;
     if (isInterdictionWave(GameState.wave)) showInterdictionAlert();
     SFX.waveStart();
@@ -3153,6 +3361,7 @@ function transitionToDefend() {
 function checkWaveComplete() {
     // Wave is complete when spawn queue is empty AND no enemies remain
     if (GameState.spawnQueue.length === 0 && Entities.enemies.length === 0) {
+        finalizeWavePerformance();
         GameState.phase = 'waveEnd';
         GameState.waveEndTimer = WAVE_END_PAUSE;
     }
@@ -3220,6 +3429,11 @@ function buildWaveSpawnQueue(waveNum) {
     if (isInterdictionWave(waveNum)) {
         tankerCount = Math.max(1, Math.round(tankerCount * INTERDICTION_TANKER_MULT));
     }
+
+    // ADR 0005: performance-adaptive spawn counts (baseline wave index preserved above)
+    tankerCount = applyAdaptiveCount(tankerCount, 'tanker');
+    escortCount = applyAdaptiveCount(escortCount, 'escort');
+    f35Count = applyAdaptiveCount(f35Count, 'f35');
 
     // Wave scaling factors
     const speedScale = Math.pow(1 + WAVE_SPEED_SCALING, waveNum - 1);
@@ -3359,6 +3573,7 @@ function updateSpawnQueue(dt) {
    ==================================================================== */
 
 function spawnEnemy(entry) {
+    recordWaarSpawn(entry.type);
     if (entry.type === 'f35') {
         spawnF35(entry);
         return;
@@ -3464,6 +3679,7 @@ function updateEnemies(dt) {
 
 function handleTankerEscape(enemy) {
     if (enemy.type.startsWith('tanker')) {
+        recordWaarEscape();
         applyOilDelta(enemy.oilEscape); // logarithmic scaling applied
         SFX.oilDown();
     }
@@ -3471,6 +3687,7 @@ function handleTankerEscape(enemy) {
 }
 
 function handleEnemyKill(enemy) {
+    recordWaarKill(enemy.type);
     SFX.shipExplosion();
     if (enemy.type.startsWith('tanker')) {
         applyOilDelta(enemy.oilDestroy); // logarithmic scaling applied
@@ -3632,6 +3849,7 @@ function updateProjectiles(dt) {
                 // SAM intercept attempt
                 if (gameRandom() < (p.ownerUnit.interceptChance || SAM_INTERCEPT_CHANCE)) {
                     t.hp = 0; // destroy the cruise missile
+                    if (GameState.waar) GameState.waar.samIntercepts++;
                     spawnEffect(t.x, t.y, '#33ff33', 15, 0.4);
                 }
                 // Miss or hit, projectile consumed
@@ -3779,7 +3997,7 @@ function updateCruiseMissiles(dt, isSetupPhase) {
         }
     } else {
         const dripMult = isSetupPhase ? CRUISE_MISSILE_SETUP_MULT : CRUISE_MISSILE_DRIP_MULT;
-        const rate = CRUISE_MISSILE_BASE_RATE * GameState.wave * dripMult;
+        const rate = CRUISE_MISSILE_BASE_RATE * GameState.wave * dripMult * getAdaptiveMult('cruise');
         if (gameRandom() < rate * dt && Entities.playerUnits.length > 0) {
             spawnCruiseMissile();
         }
@@ -3838,6 +4056,7 @@ function updateCruiseMissiles(dt, isSetupPhase) {
 function spawnCruiseMissile() {
     const target = pickCruiseMissileTarget();
     if (!target) return;
+    if (GameState.waar) GameState.waar.cruiseMissilesFired++;
 
     // Spawn from random offscreen position
     const edge = Math.floor(gameRandom() * 4);
@@ -4948,6 +5167,7 @@ function gameLoop(timestamp) {
 function startGame() {
     if (!HEADLESS) document.getElementById('screen-intro').classList.add('hidden');
     clearDeploymentCells();
+    resetAdaptiveState();
     GameState.salvoRemaining = 0;
     GameState.salvoTick = 0;
     GameState.f14OilMilestonesAwarded = [];
@@ -5557,6 +5777,60 @@ const RegressionTests = {
             typeof SFX.defeat === 'function' &&
             typeof SFX.stalemate === 'function');
 
+        // --- ADR 0005: performance-adaptive wave difficulty ---
+        this.assert('Adaptive difficulty constants defined',
+            ADAPT_SPAN > 0 && ADAPT_FLOOR < 1 && ADAPT_CEIL > 1);
+        this.assert('GameState adaptive + WAAR history exist',
+            GameState.adaptive && typeof GameState.adaptive.tanker === 'number' &&
+            Array.isArray(GameState.waarHistory));
+
+        resetAdaptiveState();
+        const dominantWaar = {
+            tankersSpawned: 10, tankersKilled: 10, tankersEscaped: 0,
+            escortsSpawned: 2, escortsKilled: 2, f35Spawned: 1, f35Killed: 1,
+            playerUnitsDefendStart: 5, playerUnitsWaveEnd: 5,
+            playerHpDefendStart: 1000, playerHpWaveEnd: 900,
+            defendDurationSec: 40, expectedDefendDurationSec: 80,
+            cruiseMissilesFired: 10, samIntercepts: 3, f14StrikesUsed: 0,
+        };
+        const weakWaar = {
+            ...dominantWaar,
+            tankersKilled: 2, tankersEscaped: 8,
+            escortsKilled: 0, f35Killed: 0,
+            playerUnitsWaveEnd: 1, playerHpWaveEnd: 100,
+            defendDurationSec: 120,
+        };
+        const ppiDom = computePerformancePressureIndex(dominantWaar);
+        const ppiWeak = computePerformancePressureIndex(weakWaar);
+        this.assert('Dominant wave PPI exceeds weak wave PPI', ppiDom > ppiWeak);
+
+        resetAdaptiveState();
+        ADAPTIVE_DIFFICULTY_ENABLED = true;
+        GameState.difficulty = 'standard';
+        updateAdaptiveFromPpi(ppiDom);
+        const cruiseAfterDom = GameState.adaptive.cruise;
+        const tankerAfterDom = GameState.adaptive.tanker;
+        resetAdaptiveState();
+        updateAdaptiveFromPpi(ppiWeak);
+        this.assert('Strong performance raises cruise mult more than weak play',
+            cruiseAfterDom > GameState.adaptive.cruise);
+        this.assert('Cruise channel gain >= tanker channel gain at high PPI',
+            (cruiseAfterDom - 1) >= (tankerAfterDom - 1));
+
+        ADAPTIVE_DIFFICULTY_ENABLED = false;
+        GameState.adaptive.tanker = 1.5;
+        this.assert('Adaptive disabled leaves spawn counts unchanged',
+            applyAdaptiveCount(10, 'tanker') === 10);
+        ADAPTIVE_DIFFICULTY_ENABLED = true;
+        GameState.adaptive.tanker = 1.2;
+        this.assert('Adaptive enabled scales spawn counts',
+            applyAdaptiveCount(10, 'tanker') === 12);
+        resetAdaptiveState();
+
+        this.assert('Expected defend duration increases with queue size',
+            computeExpectedDefendDurationSec(20, 5) >
+            computeExpectedDefendDurationSec(5, 5));
+
         // --- Reference panel ---
         this.assert('toggleReference function exists',
             typeof toggleReference === 'function');
@@ -5631,6 +5905,10 @@ if (typeof module !== 'undefined' && module.exports) {
         // Unit management
         createPlayerUnit, validatePlacement, upgradeUnit, activateF14,
         selectUnitType, buildWaveSpawnQueue, clearDeploymentCells, pickLaneMinePoint,
+        // ADR 0005 adaptive difficulty
+        createEmptyWaar, resetAdaptiveState, computePerformancePressureIndex,
+        updateAdaptiveFromPpi, computeExpectedDefendDurationSec, applyAdaptiveCount,
+        getAdaptiveMult, finalizeWavePerformance,
         // Economy
         applyOilDelta, calculateWaveIncome,
         // Geometry
