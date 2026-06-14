@@ -23,16 +23,17 @@ Alternatives considered:
 
 ## Decision
 
-1. **Primary runner:** Cursor Cloud Agents + [Automations](https://cursor.com/automations) on branch **`self-play`**, following [`docs/cursor/balance-self-play-runbook.md`](../cursor/balance-self-play-runbook.md).
-2. **Environment:** Commit [`.cursor/environment.json`](../../.cursor/environment.json) (Node 20, `npm ci` on boot).
+1. **Primary runner:** Cursor Cloud Agents + [Automations](https://cursor.com/automations) on branch **`self-play`**, following the runbook on that branch: [`docs/cursor/balance-self-play-runbook.md`](https://github.com/jpt4/hormuz/blob/self-play/docs/cursor/balance-self-play-runbook.md).
+2. **Environment:** [`.cursor/environment.json`](https://github.com/jpt4/hormuz/blob/self-play/.cursor/environment.json) on **`self-play`** only (`npm ci` on boot).
 3. **Schedule:**
    - **Phase 1 (bootstrap):** daily cron `0 6 * * *` (06:00 UTC).
    - **Phase 2 (steady):** weekly cron `0 6 * * 0` after **3 consecutive daily runs** meet equilibrium criteria (see runbook).
 4. **Balance parameters (cloud):** `--cycles=2 --gen=8 --pop=25`.
 5. **Deploy:** unchanged — push to `self-play` triggers [`.github/workflows/deploy-pages.yml`](../../.github/workflows/deploy-pages.yml).
 6. **Unattended git:** [`config-writer.js`](../../self-play/config-writer.js) sets bot identity, uses `GITHUB_TOKEN`/`GIT_TOKEN` for push, exits non-zero on failure when `CI`, `CURSOR_CLOUD`, or `GITHUB_ACTIONS` is set.
-7. **Baseline:** reset stale pre–ADR-0005 [`balance-config.js`](../../balance-config.js) to `{}` before first cloud cycle.
-8. **No `GAME_VERSION` bump** — infrastructure-only ADR.
+7. **Baseline:** on **`self-play`**, reset stale pre–ADR-0005 `balance-config.js` to `{}` before first cloud cycle.
+8. **Branch separation:** `balance-config.js`, `self-play/configs/`, balance runbook, and `.cursor/environment.json` are **`self-play`-branch artifacts**. **`master`** keeps canonical empty overrides only; do **not** merge self-play balance commits onto `master`.
+9. **No `GAME_VERSION` bump** — infrastructure-only ADR.
 
 ## Consequences
 
@@ -63,6 +64,6 @@ Alternatives considered:
 
 ## Links
 
-- Runbook: [`docs/cursor/balance-self-play-runbook.md`](../cursor/balance-self-play-runbook.md)
+- Runbook (self-play branch): [balance-self-play-runbook.md](https://github.com/jpt4/hormuz/blob/self-play/docs/cursor/balance-self-play-runbook.md)
 - Deploy workflow: [`.github/workflows/deploy-pages.yml`](../../.github/workflows/deploy-pages.yml)
 - Prior balance tooling split: `LOG.md` 2026-06-13
