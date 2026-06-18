@@ -35,3 +35,20 @@ Project Specific:
 15. Prefer structured tools (MCP servers, LSP servers, existing utilities, etc.) where possible, when they support a desired behavior. Use ad hoc scripts and function reimplementation only as secondary support when such tools are insufficient, absent, unnecessary overhead for the task at hand, or the specific use case merits additional documentation in the form of custom code.
 
 16. **Dual top-level branches (this repository):** In addition to the usual **`master`** integration line described in §5 above, **`self-play`** is a second **long-lived, top-level** branch—not throwaway scaffolding. **`master`** and **`self-play`** each may serve as the **root** from which ADR-scoped implementation branches fork and into which completed ADR merges are **recollected** for **that line’s** roadmap. **`self-play`** is **explicitly expected to diverge** from **`master`**: evolutionary balance outputs, tuner experiments in **`self-play/`**, and automation-driven commits are normal there and **do not** presume a full reciprocal merge onto **`master`**. Likewise, **`master`** is **not** required to ingest every **`self-play`** commit, and **`self-play`** is **not** required to ingest every **`master`** change. **Synchronization is selective:** when specific shared concerns warrant it—shared engine or UI fixes, economy rules affecting both deployments, parity for a deliberate release—you merge or cherry-pick **only those changes** in whichever direction applies (**`master` → `self-play`**, **`self-play` → `master`**, or both for different files). Do not assume either branch will eventually absorb the other wholesale; preserve both remote branches—see **`README.md`** and deployment workflows for canonical vs experimental Pages builds.
+
+## Cursor Cloud specific instructions
+
+Environment refresh on session start runs `npm ci` (the project has **zero runtime npm dependencies**; the lockfile exists only for CI reproducibility). Node 18+ is required (CI uses Node 20). No further install steps are needed.
+
+Services and how to run them (standard commands live in `README.md` / `package.json`):
+
+- **Browser game** (`hormuz-game.html`) — the only shipped product. There is **no build step and no `npm run dev`**. Open the file directly, or serve statically with `python3 -m http.server 8080` and visit `http://localhost:8080/hormuz-game.html`. `balance-config.js` is loaded alongside it; if it is missing, the inline `onerror` handler falls back to empty overrides, so the game still runs.
+- **Node self-play tooling** — `node self-play/run.js {test|play|evolve|balance}`. The `balance` subcommand commits/pushes by default; use `--no-push` / `--dry-run` to avoid git side effects when only validating.
+
+Testing:
+
+- Fast gate: `npm test`. Slower full-game smoke: `npm run test:extended`. Both: `npm run test:all`.
+- In-browser regression suite (108 checks) auto-runs ~0.5s after load and can be re-run with **Ctrl+T** (results print to the devtools console).
+- **There is no lint tooling** (no ESLint/Prettier, no `npm run lint`); quality gates are tests + the TDD/ADR policy above.
+
+Gameplay gotcha (relevant when manually testing the game): defensive units have placement zones — `land` (ASCM, SAM, Drone Swarm), `coast` (Minelayer), `water` (Fast Attack, Submarine). Iranian land is the landmass at the **top** of the map (near "Bandar-e 'Abbas"); the channel in the middle is water. Selecting a unit highlights its valid zones; **clicking an invalid zone is silently rejected** (only a `console.warn`, no on-screen feedback), so a click that does nothing usually means a wrong-zone click. Press **SPACE** to pause (placement still works while paused), and placement is allowed during both the `setup` and `defend` phases. A successful placement deducts the unit cost from FUNDS and draws the unit on the map.
