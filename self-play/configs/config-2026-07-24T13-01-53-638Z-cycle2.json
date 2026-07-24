@@ -1,5 +1,5 @@
 {
-  "constantOverrides": {
+  "overrides": {
     "UNIT_DEFS[4].dps": 14,
     "UNIT_DEFS[4].cooldown": 1.1,
     "WAVE_HP_SCALING": 0.07,
@@ -14,7 +14,13 @@
     "UPGRADE_COST_FRACTION_TIER1": 0.29000000000000004,
     "UPGRADE_COST_FRACTION_TIER2": 0.35
   },
-  "timestamp": "2026-07-24T13:01:53.639Z",
-  "cycle": 2,
-  "balanced": true
+  "metadata": {
+    "cycle": 2,
+    "winRate": "32.0",
+    "diversity": "77",
+    "typesUsed": "5.0",
+    "archetypes": 4,
+    "balanced": true,
+    "timestamp": "2026-07-24T13:01:53.638Z"
+  }
 }
