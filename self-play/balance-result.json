@@ -14,7 +14,7 @@
     "UPGRADE_COST_FRACTION_TIER1": 0.29000000000000004,
     "UPGRADE_COST_FRACTION_TIER2": 0.35
   },
-  "timestamp": "2026-10-28T13:03:29.906Z",
-  "cycle": 1,
-  "balanced": false
+  "timestamp": "2026-10-28T13:04:25.262Z",
+  "cycle": 2,
+  "balanced": true
 }
